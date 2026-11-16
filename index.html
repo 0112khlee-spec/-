@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>포디프레임 시에르핀스키 피라미드</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #000000;
+      overflow: hidden;
+    }
+
+    #stageCanvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    #stageCanvas:active {
+      cursor: grabbing;
+    }
+
+    .arrow-btn {
+      position: fixed;
+      bottom: 24px;
+      width: 64px;
+      height: 64px;
+      border-radius: 9999px;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      background: rgba(255, 255, 255, 0.14);
+      color: #ffffff;
+      font-size: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 20;
+      backdrop-filter: blur(4px);
+      transition: transform 0.12s ease, background-color 0.15s ease, opacity 0.15s ease;
+    }
+
+    .arrow-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    .arrow-btn:active {
+      transform: scale(0.92);
+    }
+
+    .arrow-btn:disabled {
+      opacity: 0.25;
+      cursor: default;
+    }
+
+    #prevBtn {
+      left: 24px;
+    }
+
+    #nextBtn {
+      right: 24px;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="stageCanvas"></canvas>
+
+  <button id="prevBtn" type="button" class="arrow-btn" aria-label="이전 단계">◀</button>
+  <button id="nextBtn" type="button" class="arrow-btn" aria-label="다음 단계">▶</button>
+
+  <script>
+    const canvas = document.getElementById('stageCanvas');
+    const ctx = canvas.getContext('2d');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+
+    const MAX_STEP = 6; // 0 ~ 6 (7단계)
+    let currentStep = 0;
+    let stepAnim = 0;
+    let foldAngle = 0;
+    let targetFold = 0;
+    let rotY = -0.35;
+    let targetRotY = -0.35;
+    let rotX = 0.65;
+    let targetRotX = 0.65;
+
+    let isDragging = false;
+    let userDragged = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let lastTs = 0;
+    let animId = null;
+    let triggered = new Set();
+
+    const H = Math.sqrt(3) / 2;
+
+    function getNodes(theta) {
+      const c = Math.cos(theta);
+      const s = Math.sin(theta);
+
+      const topHalf = (x, distZ) => ({ x, y: -distZ * s, z: -distZ * c });
+      const botHalf = (x, distZ) => ({ x, y: -distZ * s, z: distZ * c });
+
+      const B_L = { x: -1.0, y: 0, z: 0 };
+      const B_M = { x: 0.0,  y: 0, z: 0 };
+      const B_R = { x: 1.0,  y: 0, z: 0 };
+
+      const T_ML  = topHalf(-0.5, H);
+      const T_MR  = topHalf(0.5, H);
+      const T_TOP = topHalf(0.0, 2 * H);
+
+      const D_ML  = botHalf(-0.5, H);
+      const D_MR  = botHalf(0.5, H);
+      const D_BOT = botHalf(0.0, 2 * H);
+
+      const M_TOP = {
+        x: (T_TOP.x + D_BOT.x) * 0.5,
+        y: (T_TOP.y + D_BOT.y) * 0.5,
+        z: (T_TOP.z + D_BOT.z) * 0.5
+      };
+
+      return { B_L, B_M, B_R, T_ML, T_MR, T_TOP, D_ML, D_MR, D_BOT, M_TOP };
+    }
+
+    const EDGES_TOP_TRI = [
+      ['B_L', 'B_M'], ['B_L', 'T_ML'], ['B_M', 'T_ML'],
+      ['B_M', 'B_R'], ['B_M', 'T_MR'], ['B_R', 'T_MR'],
+      ['T_ML', 'T_MR'],
+      ['T_ML', 'T_TOP'], ['T_MR', 'T_TOP']
+    ];
+
+    const EDGES_BOT_TRI = [
+      ['B_L', 'D_ML'], ['B_M', 'D_ML'],
+      ['B_M', 'D_MR'], ['B_R', 'D_MR'],
+      ['D_ML', 'D_MR'],
+      ['D_ML', 'D_BOT'], ['D_MR', 'D_BOT']
+    ];
+
+    const EDGES_TIP_CONNECT = [
+      ['T_TOP', 'M_TOP'], ['D_BOT', 'M_TOP']
+    ];
+
+    // 한쪽 면(왼쪽 면) 먼저 속 채우기
+    const EDGES_FILL_SIDE1 = [
+      ['M_TOP', 'T_ML'], ['M_TOP', 'D_ML'], ['T_ML', 'D_ML']
+    ];
+
+    // 반대쪽 면(오른쪽 면) 그다음 속 채우기
+    const EDGES_FILL_SIDE2 = [
+      ['M_TOP', 'T_MR'], ['M_TOP', 'D_MR'], ['T_MR', 'D_MR']
+    ];
+
+    // Web Audio API 쏙! 효과음
+    let audioCtx = null;
+    function getAudioCtx() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) audioCtx = new AC();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function playPopChime(pitchIdx = 0) {
+      const ac = getAudioCtx();
+      if (!ac) return;
+      const now = ac.currentTime;
+
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(280, now);
+      osc.frequency.exponentialRampToValueAtTime(680, now + 0.07);
+      gain.gain.setValueAtTime(0.26, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.09);
+      osc.connect(gain);
+      gain.connect(ac.destination);
+      osc.start(now);
+      osc.stop(now + 0.1);
+
+      const notes = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
+      const bell = ac.createOscillator();
+      const bgain = ac.createGain();
+      bell.type = 'triangle';
+      bell.frequency.setValueAtTime(notes[pitchIdx % notes.length], now + 0.04);
+      bgain.gain.setValueAtTime(0.18, now + 0.04);
+      bgain.gain.exponentialRampToValueAtTime(0.005, now + 0.34);
+      bell.connect(bgain);
+      bgain.connect(ac.destination);
+      bell.start(now + 0.04);
+      bell.stop(now + 0.35);
+    }
+
+    function playFanfare() {
+      const ac = getAudioCtx();
+      if (!ac) return;
+      const now = ac.currentTime;
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + i * 0.11);
+        gain.gain.setValueAtTime(0.2, now + i * 0.11);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.11 + 0.35);
+        osc.connect(gain);
+        gain.connect(ac.destination);
+        osc.start(now + i * 0.11);
+        osc.stop(now + i * 0.11 + 0.36);
+      });
+    }
+
+    function triggerOnce(key, fn) {
+      if (!triggered.has(key)) {
+        triggered.add(key);
+        fn();
+      }
+    }
+
+    function project(pt, w, h) {
+      const cy = Math.cos(rotY), sy = Math.sin(rotY);
+      const cx = Math.cos(rotX), sx = Math.sin(rotX);
+
+      let x = pt.x * cy - pt.z * sy;
+      let z = pt.x * sy + pt.z * cy;
+      let y = pt.y * cx - z * sx;
+      z = pt.y * sx + z * cx;
+
+      const fov = Math.min(w, h) * 0.68;
+      const scale = fov / Math.max(1.0, 3.5 + z);
+      return {
+        x: w * 0.5 + x * scale,
+        y: h * 0.56 + y * scale
+      };
+    }
+
+    function getAlignedProngAngles(nodeKey, pts, allStageEdges) {
+      const used = [];
+      let sumX = 0;
+      let sumY = 0;
+
+      allStageEdges.forEach(([a, b]) => {
+        let other = null;
+        if (a === nodeKey) other = b;
+        else if (b === nodeKey) other = a;
+        if (other && pts[other]) {
+          const dx = pts[other].x - pts[nodeKey].x;
+          const dy = pts[other].y - pts[nodeKey].y;
+          const len = Math.hypot(dx, dy);
+          if (len > 1e-3) {
+            used.push(Math.atan2(dy, dx));
+            sumX += dx / len;
+            sumY += dy / len;
+          }
+        }
+      });
+
+      const neededUnused = Math.max(0, 6 - used.length);
+      if (used.length === 0) {
+        return [0, 1, 2, 3, 4, 5].map(i => (i * Math.PI) / 3);
+      }
+      if (neededUnused === 0) {
+        return used;
+      }
+
+      const oppAngle = Math.hypot(sumX, sumY) < 0.05
+        ? Math.PI / 2
+        : Math.atan2(-sumY, -sumX);
+
+      const unused = [];
+      const spread = 0.52;
+      for (let k = 0; k < neededUnused; k++) {
+        unused.push(oppAngle + (k - (neededUnused - 1) / 2) * spread);
+      }
+      return used.concat(unused);
+    }
+
+    function drawConnector6(p, r, angles) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = Math.max(3.5, r * 0.42);
+      ctx.lineCap = 'round';
+      angles.forEach(ang => {
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(ang) * r * 1.9, Math.sin(ang) * r * 1.9);
+        ctx.stroke();
+      });
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.82, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#64748b';
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawStrawSeated(pA, pB, rConn, prog = 1.0) {
+      const t = Math.max(0, Math.min(1, prog));
+      if (t <= 0.01) return;
+
+      const dx = pB.x - pA.x;
+      const dy = pB.y - pA.y;
+      const len = Math.hypot(dx, dy);
+      if (len < rConn * 2.0) return;
+
+      const ux = dx / len;
+      const uy = dy / len;
+      const collar = rConn * 0.84;
+
+      const sx = pA.x + ux * collar;
+      const sy = pA.y + uy * collar;
+      const ex = pB.x - ux * collar;
+      const ey = pB.y - uy * collar;
+
+      const cx = sx + (ex - sx) * t;
+      const cy = sy + (ey - sy) * t;
+
+      ctx.save();
+      ctx.strokeStyle = '#991b1b';
+      ctx.lineWidth = 14;
+      ctx.lineCap = 'butt';
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function setStep(idx) {
+      currentStep = Math.max(0, Math.min(MAX_STEP, idx));
+      stepAnim = 0;
+      userDragged = false;
+      triggered.clear();
+
+      prevBtn.disabled = (currentStep === 0);
+      nextBtn.disabled = (currentStep === MAX_STEP);
+
+      if (currentStep <= 1) {
+        targetFold = 0;
+        foldAngle = 0;
+        targetRotY = -0.35;
+        targetRotX = 0.65;
+      } else if (currentStep === 2) {
+        targetFold = Math.PI / 4;
+        targetRotY = -Math.PI / 2;
+        targetRotX = 0.22;
+      } else if (currentStep === 3 || currentStep === 4) {
+        targetFold = Math.PI / 4;
+        foldAngle = Math.PI / 4;
+        targetRotY = -Math.PI / 2;
+        targetRotX = 0.22;
+      } else if (currentStep === 5) {
+        // 반대쪽 면이 잘 보이도록 반대 측면(+90도)으로 살짝 돌려줌
+        targetFold = Math.PI / 4;
+        foldAngle = Math.PI / 4;
+        targetRotY = Math.PI / 2;
+        targetRotX = 0.22;
+      } else {
+        targetFold = Math.PI / 4;
+        foldAngle = Math.PI / 4;
+        playFanfare();
+      }
+    }
+
+    function drawEdgeList(pts, edges, rConn, animProgress, prefix) {
+      const n = edges.length;
+      edges.forEach(([a, b], idx) => {
+        const start = idx / n;
+        const span = 1 / n;
+        const p = Math.max(0, Math.min(1, (animProgress - start) / span));
+        if (p >= 0.98) triggerOnce(prefix + '_' + idx, () => playPopChime(idx));
+        drawStrawSeated(pts[a], pts[b], rConn, p);
+      });
+    }
+
+    function render() {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, w, h);
+
+      const nodes = getNodes(foldAngle);
+      const pts = {};
+      Object.keys(nodes).forEach(k => { pts[k] = project(nodes[k], w, h); });
+      const rConn = Math.max(10, Math.min(w, h) * 0.017);
+
+      let activeEdges = [...EDGES_TOP_TRI];
+      if (currentStep >= 1) activeEdges = activeEdges.concat(EDGES_BOT_TRI);
+      if (currentStep >= 3) activeEdges = activeEdges.concat(EDGES_TIP_CONNECT);
+      if (currentStep >= 4) activeEdges = activeEdges.concat(EDGES_FILL_SIDE1);
+      if (currentStep >= 5) activeEdges = activeEdges.concat(EDGES_FILL_SIDE2);
+
+      const visibleNodes = ['B_L', 'B_M', 'B_R', 'T_ML', 'T_MR', 'T_TOP'];
+      if (currentStep >= 1) visibleNodes.push('D_ML', 'D_MR', 'D_BOT');
+      if (currentStep >= 3) visibleNodes.push('M_TOP');
+
+      visibleNodes.forEach(k => {
+        const angles = getAlignedProngAngles(k, pts, activeEdges);
+        drawConnector6(pts[k], rConn, angles);
+      });
+
+      if (currentStep === 0) {
+        drawEdgeList(pts, EDGES_TOP_TRI, rConn, stepAnim, 's0');
+      } else {
+        EDGES_TOP_TRI.forEach(([a, b]) => drawStrawSeated(pts[a], pts[b], rConn, 1.0));
+      }
+
+      if (currentStep === 1) {
+        drawEdgeList(pts, EDGES_BOT_TRI, rConn, stepAnim, 's1');
+      } else if (currentStep >= 2) {
+        EDGES_BOT_TRI.forEach(([a, b]) => drawStrawSeated(pts[a], pts[b], rConn, 1.0));
+      }
+
+      if (currentStep === 2) {
+        if (stepAnim > 0.5) triggerOnce('s2_fold', () => playPopChime(3));
+      }
+
+      if (currentStep === 3) {
+        drawEdgeList(pts, EDGES_TIP_CONNECT, rConn, stepAnim, 's3');
+      } else if (currentStep >= 4) {
+        EDGES_TIP_CONNECT.forEach(([a, b]) => drawStrawSeated(pts[a], pts[b], rConn, 1.0));
+      }
+
+      if (currentStep === 4) {
+        drawEdgeList(pts, EDGES_FILL_SIDE1, rConn, stepAnim, 's4');
+      } else if (currentStep >= 5) {
+        EDGES_FILL_SIDE1.forEach(([a, b]) => drawStrawSeated(pts[a], pts[b], rConn, 1.0));
+      }
+
+      if (currentStep === 5) {
+        drawEdgeList(pts, EDGES_FILL_SIDE2, rConn, stepAnim, 's5');
+      } else if (currentStep >= 6) {
+        EDGES_FILL_SIDE2.forEach(([a, b]) => drawStrawSeated(pts[a], pts[b], rConn, 1.0));
+      }
+    }
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(320, Math.floor(window.innerWidth * dpr));
+      canvas.height = Math.max(240, Math.floor(window.innerHeight * dpr));
+    }
+
+    function loop(ts) {
+      if (!lastTs) lastTs = ts;
+      const dt = Math.min(0.05, (ts - lastTs) / 1000);
+      lastTs = ts;
+
+      if (stepAnim < 1.0) {
+        const dur = currentStep === 0 ? 3.2 : currentStep === 1 ? 2.6 : currentStep === 2 ? 1.4 : 1.6;
+        stepAnim = Math.min(1.0, stepAnim + dt / dur);
+      }
+
+      if (Math.abs(targetFold - foldAngle) > 0.002) {
+        foldAngle += (targetFold - foldAngle) * Math.min(1, dt * 3.5);
+      } else {
+        foldAngle = targetFold;
+      }
+
+      if (!isDragging && !userDragged && currentStep < MAX_STEP) {
+        rotY += (targetRotY - rotY) * Math.min(1, dt * 4.0);
+        rotX += (targetRotX - rotX) * Math.min(1, dt * 4.0);
+      }
+
+      if (currentStep === MAX_STEP && !isDragging) {
+        rotY += dt * 0.45;
+      }
+
+      render();
+      animId = requestAnimationFrame(loop);
+    }
+
+    prevBtn.addEventListener('click', () => {
+      getAudioCtx();
+      setStep(currentStep - 1);
+    });
+
+    nextBtn.addEventListener('click', () => {
+      getAudioCtx();
+      setStep(currentStep + 1);
+    });
+
+    canvas.addEventListener('pointerdown', (e) => {
+      isDragging = true;
+      userDragged = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      rotY += dx * 0.01;
+      rotX = Math.max(-0.5, Math.min(1.25, rotX + dy * 0.01));
+    });
+    window.addEventListener('pointerup', () => { isDragging = false; });
+
+    window.addEventListener('resize', resizeCanvas);
+
+    window.onload = () => {
+      resizeCanvas();
+      setStep(0);
+      if (animId) cancelAnimationFrame(animId);
+      animId = requestAnimationFrame(loop);
+    };
+  </script>
+</body>
+</html>
