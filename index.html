@@ -2,540 +2,1617 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>포디프레임 시에르핀스키 피라미드</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>함께 배움터 — 특수교육 통합 체험형 학습 앱</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
   <style>
-    * {
-      box-sizing: border-box;
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background-color: #EEF2F5;
+      color: #0F172A;
       -webkit-tap-highlight-color: transparent;
+    }
+    @keyframes gentlePulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.45); }
+      50% { transform: scale(1.025); box-shadow: 0 0 0 14px rgba(15, 118, 110, 0); }
+    }
+    .hint-pulse {
+      animation: gentlePulse 1.3s infinite;
+      border-color: #0F766E !important;
+      background-color: #CCFBF1 !important;
+    }
+    @keyframes popIn {
+      0% { transform: scale(0.96); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .pop-in {
+      animation: popIn 0.22s ease-out forwards;
+    }
+    .tap-target {
+      min-height: 64px;
+      touch-action: manipulation;
       user-select: none;
-    }
-
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      background-color: #000000;
-      overflow: hidden;
-    }
-
-    #stageCanvas {
-      display: block;
-      width: 100vw;
-      height: 100vh;
-      cursor: grab;
-      touch-action: none;
-    }
-
-    #stageCanvas:active {
-      cursor: grabbing;
-    }
-
-    .arrow-btn {
-      position: fixed;
-      bottom: 24px;
-      width: 64px;
-      height: 64px;
-      border-radius: 9999px;
-      border: 2px solid rgba(255, 255, 255, 0.35);
-      background: rgba(255, 255, 255, 0.14);
-      color: #ffffff;
-      font-size: 26px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      z-index: 20;
-      backdrop-filter: blur(4px);
-      transition: transform 0.12s ease, background-color 0.15s ease, opacity 0.15s ease;
-    }
-
-    .arrow-btn:hover {
-      background: rgba(255, 255, 255, 0.25);
-    }
-
-    .arrow-btn:active {
-      transform: scale(0.92);
-    }
-
-    .arrow-btn:disabled {
-      opacity: 0.25;
-      cursor: default;
-    }
-
-    #prevBtn {
-      left: 24px;
-    }
-
-    #nextBtn {
-      right: 24px;
     }
   </style>
 </head>
-<body>
+<body class="min-h-screen lg:h-screen lg:overflow-hidden flex flex-col">
 
-  <canvas id="stageCanvas"></canvas>
+  <!-- 1. TOP BAR (Fixed non-overlapping flex zone, ~10-12% height) -->
+  <header class="shrink-0 bg-white border-b-2 border-slate-200 px-4 lg:px-8 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <button id="btn-home" class="tap-target flex items-center gap-3 px-3 py-1.5 rounded-2xl hover:bg-slate-100 transition text-left" title="처음 화면으로">
+          <span class="w-11 h-11 rounded-2xl bg-teal-700 text-white flex items-center justify-center text-2xl font-black shadow-sm">배</span>
+          <div>
+            <div class="text-xl font-black tracking-tight text-slate-900 leading-tight">함께 배움터</div>
+            <div class="text-xs font-bold text-slate-500">특수교육 통합 체험 학습</div>
+          </div>
+        </button>
+      </div>
 
-  <button id="prevBtn" type="button" class="arrow-btn" aria-label="이전 단계">◀</button>
-  <button id="nextBtn" type="button" class="arrow-btn" aria-label="다음 단계">▶</button>
+      <!-- Center Game Progress (Visible during game) -->
+      <div id="top-game-status" class="hidden flex-1 max-w-md mx-4">
+        <div class="flex items-center justify-between text-sm font-black text-slate-700 mb-1.5">
+          <span id="top-badge" class="px-3 py-0.5 rounded-lg bg-teal-700 text-white text-xs"></span>
+          <span id="top-step-label"></span>
+        </div>
+        <div class="w-full h-3.5 bg-slate-200 rounded-full overflow-hidden">
+          <div id="top-progress-bar" class="h-full bg-teal-600 transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>
 
-  <script>
-    const canvas = document.getElementById('stageCanvas');
-    const ctx = canvas.getContext('2d');
-    const prevBtn = document.getElementById('prevBtn');
-    const nextBtn = document.getElementById('nextBtn');
+      <!-- Right Controls (Teacher & Audio) -->
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center gap-1.5 bg-amber-100 border-2 border-amber-300 px-3.5 py-2 rounded-2xl text-amber-950 font-black text-base">
+          <span>⭐</span>
+          <span>별</span>
+          <span id="star-count" class="text-lg text-amber-800">0</span>
+        </div>
 
-    const MAX_STEP = 6; // 0 ~ 6 (7단계)
-    let currentStep = 0;
-    let stepAnim = 0;
-    let foldAngle = 0;
-    let targetFold = 0;
-    let rotY = -0.35;
-    let targetRotY = -0.35;
-    let rotX = 0.65;
-    let targetRotX = 0.65;
+        <button id="toggle-tts" class="tap-target px-3.5 py-2 rounded-2xl border-2 border-slate-300 bg-white hover:bg-slate-50 text-sm font-black flex items-center gap-1.5 transition" aria-pressed="true">
+          <span id="tts-icon">🔊</span>
+          <span id="tts-label">음성 켜짐</span>
+        </button>
 
-    let isDragging = false;
-    let userDragged = false;
-    let dragStartX = 0;
-    let dragStartY = 0;
-    let lastTs = 0;
-    let animId = null;
-    let triggered = new Set();
+        <button id="toggle-sfx" class="tap-target px-3.5 py-2 rounded-2xl border-2 border-slate-300 bg-white hover:bg-slate-50 text-sm font-black flex items-center gap-1.5 transition" aria-pressed="true">
+          <span id="sfx-icon">🎵</span>
+          <span id="sfx-label">효과음</span>
+        </button>
 
-    const H = Math.sqrt(3) / 2;
+        <button id="toggle-teacher" class="tap-target px-4 py-2 rounded-2xl border-2 border-teal-700 bg-teal-50 text-teal-950 hover:bg-teal-100 text-sm font-black flex items-center gap-1.5 transition">
+          <span>⚙️</span>
+          <span>교사 설정</span>
+        </button>
+      </div>
+    </div>
+  </header>
 
-    function getNodes(theta) {
-      const c = Math.cos(theta);
-      const s = Math.sin(theta);
+  <!-- 2. CENTER STAGE (Non-overlapping scrollable/centered flex-1 zone) -->
+  <main id="app-root" class="flex-1 overflow-y-auto px-4 lg:px-8 py-3 lg:py-4 flex flex-col"></main>
 
-      const topHalf = (x, distZ) => ({ x, y: -distZ * s, z: -distZ * c });
-      const botHalf = (x, distZ) => ({ x, y: -distZ * s, z: distZ * c });
+  <!-- 3. BOTTOM ERGONOMIC STUDENT DOCK (Shown during game for easy whiteboard reach) -->
+  <footer id="bottom-dock" class="hidden shrink-0 bg-white border-t-2 border-slate-200 px-4 lg:px-8 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <button id="btn-back-hub" class="tap-target px-6 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 border-2 border-slate-300 font-black text-lg text-slate-900 flex items-center gap-2 transition">
+        <span>←</span>
+        <span>과목 화면으로</span>
+      </button>
 
-      const B_L = { x: -1.0, y: 0, z: 0 };
-      const B_M = { x: 0.0,  y: 0, z: 0 };
-      const B_R = { x: 1.0,  y: 0, z: 0 };
+      <div class="flex items-center gap-3">
+        <button id="btn-replay-voice" class="tap-target px-7 py-3 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white font-black text-lg flex items-center gap-2 shadow-sm transition">
+          <span>🔊</span>
+          <span>문제 다시 듣기</span>
+        </button>
+        <button id="btn-show-hint" class="tap-target px-7 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-lg flex items-center gap-2 shadow-sm transition">
+          <span>💡</span>
+          <span>힌트 보기</span>
+        </button>
+      </div>
+    </div>
+  </footer>
 
-      const T_ML  = topHalf(-0.5, H);
-      const T_MR  = topHalf(0.5, H);
-      const T_TOP = topHalf(0.0, 2 * H);
+  <!-- Teacher Settings Modal (Clean overlay, never pushes layout) -->
+  <div id="teacher-panel" class="hidden fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl border-4 border-teal-700 max-w-xl w-full p-6 sm:p-8 shadow-2xl pop-in">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-2xl font-black text-slate-900">교사용 학생 맞춤 설정</h2>
+          <p class="text-sm text-slate-600 mt-0.5">전자칠판 수업 중 학생 특성에 맞게 즉시 조절하세요.</p>
+        </div>
+        <button id="btn-close-teacher" class="tap-target px-4 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 font-black text-slate-800">
+          닫기 ✕
+        </button>
+      </div>
 
-      const D_ML  = botHalf(-0.5, H);
-      const D_MR  = botHalf(0.5, H);
-      const D_BOT = botHalf(0.0, 2 * H);
+      <div class="space-y-3 mb-6">
+        <label class="flex items-center justify-between p-4 rounded-2xl border-2 border-slate-200 bg-slate-50 cursor-pointer">
+          <span class="font-black text-base text-slate-900">오류 없는 학습 (오답 벌칙 없음)</span>
+          <input type="checkbox" id="opt-errorless" checked class="w-6 h-6 accent-teal-700" />
+        </label>
+        <label class="flex items-center justify-between p-4 rounded-2xl border-2 border-slate-200 bg-slate-50 cursor-pointer">
+          <span class="font-black text-base text-slate-900">자동 시각 힌트 강조</span>
+          <input type="checkbox" id="opt-autohint" checked class="w-6 h-6 accent-teal-700" />
+        </label>
+        <label class="flex items-center justify-between p-4 rounded-2xl border-2 border-slate-200 bg-slate-50 cursor-pointer">
+          <span class="font-black text-base text-slate-900">초대형 큰 글씨 모드</span>
+          <input type="checkbox" id="opt-bigtext" class="w-6 h-6 accent-teal-700" />
+        </label>
+      </div>
 
-      const M_TOP = {
-        x: (T_TOP.x + D_BOT.x) * 0.5,
-        y: (T_TOP.y + D_BOT.y) * 0.5,
-        z: (T_TOP.z + D_BOT.z) * 0.5
-      };
+      <div class="flex justify-between items-center pt-4 border-t border-slate-200">
+        <button id="btn-reset-progress" class="tap-target px-5 py-2.5 rounded-2xl bg-rose-100 hover:bg-rose-200 text-rose-900 font-black text-sm transition">
+          모은 별 · 완료 기록 초기화
+        </button>
+        <button id="btn-done-teacher" class="tap-target px-6 py-2.5 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white font-black text-base transition">
+          적용 완료
+        </button>
+      </div>
+    </div>
+  </div>
 
-      return { B_L, B_M, B_R, T_ML, T_MR, T_TOP, D_ML, D_MR, D_BOT, M_TOP };
+  <!-- Toast Feedback Banner -->
+  <div id="toast-box" class="fixed top-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 -translate-y-3">
+    <div id="toast-msg" class="px-7 py-4 rounded-2xl shadow-xl font-black text-xl bg-slate-900 text-white flex items-center gap-2 border-2 border-white/20"></div>
+  </div>
+
+<script>
+(function() {
+  // ==========================================
+  // 1. STATE & AUDIO / TTS ENGINE
+  // ==========================================
+  const state = {
+    view: 'hub', // 'hub' | 'game' | 'complete'
+    selectedLevel: 1,
+    currentSubject: null,
+    currentLevel: 1,
+    roundIndex: 0,
+    stars: 0,
+    completedGames: {},
+    ttsEnabled: true,
+    sfxEnabled: true,
+    errorlessMode: true,
+    autoHintMode: true,
+    bigTextMode: false,
+    gameData: {}
+  };
+
+  try {
+    const saved = localStorage.getItem('special_ed_app_v1');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (typeof parsed.stars === 'number') state.stars = parsed.stars;
+      if (parsed.completedGames) state.completedGames = parsed.completedGames;
     }
+  } catch (e) {}
 
-    const EDGES_TOP_TRI = [
-      ['B_L', 'B_M'], ['B_L', 'T_ML'], ['B_M', 'T_ML'],
-      ['B_M', 'B_R'], ['B_M', 'T_MR'], ['B_R', 'T_MR'],
-      ['T_ML', 'T_MR'],
-      ['T_ML', 'T_TOP'], ['T_MR', 'T_TOP']
-    ];
+  function saveProgress() {
+    try {
+      localStorage.setItem('special_ed_app_v1', JSON.stringify({
+        stars: state.stars,
+        completedGames: state.completedGames
+      }));
+    } catch (e) {}
+  }
 
-    const EDGES_BOT_TRI = [
-      ['B_L', 'D_ML'], ['B_M', 'D_ML'],
-      ['B_M', 'D_MR'], ['B_R', 'D_MR'],
-      ['D_ML', 'D_MR'],
-      ['D_ML', 'D_BOT'], ['D_MR', 'D_BOT']
-    ];
-
-    const EDGES_TIP_CONNECT = [
-      ['T_TOP', 'M_TOP'], ['D_BOT', 'M_TOP']
-    ];
-
-    // 한쪽 면(왼쪽 면) 먼저 속 채우기
-    const EDGES_FILL_SIDE1 = [
-      ['M_TOP', 'T_ML'], ['M_TOP', 'D_ML'], ['T_ML', 'D_ML']
-    ];
-
-    // 반대쪽 면(오른쪽 면) 그다음 속 채우기
-    const EDGES_FILL_SIDE2 = [
-      ['M_TOP', 'T_MR'], ['M_TOP', 'D_MR'], ['T_MR', 'D_MR']
-    ];
-
-    // Web Audio API 쏙! 효과음
-    let audioCtx = null;
-    function getAudioCtx() {
-      if (!audioCtx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (AC) audioCtx = new AC();
-      }
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-      return audioCtx;
+  let audioCtx = null;
+  function getAudioCtx() {
+    if (!audioCtx && (window.AudioContext || window.webkitAudioContext)) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+    return audioCtx;
+  }
 
-    function playPopChime(pitchIdx = 0) {
-      const ac = getAudioCtx();
-      if (!ac) return;
-      const now = ac.currentTime;
+  function playSfx(type) {
+    if (!state.sfxEnabled) return;
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
 
-      const osc = ac.createOscillator();
-      const gain = ac.createGain();
+    if (type === 'success') {
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(280, now);
-      osc.frequency.exponentialRampToValueAtTime(680, now + 0.07);
-      gain.gain.setValueAtTime(0.26, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.09);
-      osc.connect(gain);
-      gain.connect(ac.destination);
+      osc.frequency.setValueAtTime(523.25, now);
+      osc.frequency.setValueAtTime(659.25, now + 0.09);
+      osc.frequency.setValueAtTime(783.99, now + 0.18);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
       osc.start(now);
-      osc.stop(now + 0.1);
-
-      const notes = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
-      const bell = ac.createOscillator();
-      const bgain = ac.createGain();
-      bell.type = 'triangle';
-      bell.frequency.setValueAtTime(notes[pitchIdx % notes.length], now + 0.04);
-      bgain.gain.setValueAtTime(0.18, now + 0.04);
-      bgain.gain.exponentialRampToValueAtTime(0.005, now + 0.34);
-      bell.connect(bgain);
-      bgain.connect(ac.destination);
-      bell.start(now + 0.04);
-      bell.stop(now + 0.35);
-    }
-
-    function playFanfare() {
-      const ac = getAudioCtx();
-      if (!ac) return;
-      const now = ac.currentTime;
+      osc.stop(now + 0.46);
+    } else if (type === 'tap') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(440, now);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      osc.start(now);
+      osc.stop(now + 0.11);
+    } else if (type === 'nudge') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(330, now);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      osc.start(now);
+      osc.stop(now + 0.22);
+    } else if (type === 'fanfare') {
       [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
-        const osc = ac.createOscillator();
-        const gain = ac.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, now + i * 0.11);
-        gain.gain.setValueAtTime(0.2, now + i * 0.11);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.11 + 0.35);
-        osc.connect(gain);
-        gain.connect(ac.destination);
-        osc.start(now + i * 0.11);
-        osc.stop(now + i * 0.11 + 0.36);
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(freq, now + i * 0.1);
+        g.gain.setValueAtTime(0.15, now + i * 0.1);
+        g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.35);
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start(now + i * 0.1);
+        o.stop(now + i * 0.1 + 0.36);
       });
     }
+  }
 
-    function triggerOnce(key, fn) {
-      if (!triggered.has(key)) {
-        triggered.add(key);
-        fn();
+  function speak(text) {
+    if (!state.ttsEnabled || !('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'ko-KR';
+      utter.rate = 0.92;
+      utter.pitch = 1.05;
+      window.speechSynthesis.speak(utter);
+    } catch (e) {}
+  }
+
+  let toastTimer = null;
+  function showToast(msg, tone = 'dark') {
+    const box = document.getElementById('toast-box');
+    const el = document.getElementById('toast-msg');
+    el.textContent = msg;
+    el.className = 'px-7 py-4 rounded-2xl shadow-xl font-black text-xl flex items-center gap-2 border-2 border-white/20 ' +
+      (tone === 'success' ? 'bg-teal-700 text-white' :
+       tone === 'warn' ? 'bg-amber-500 text-slate-950' : 'bg-slate-900 text-white');
+    box.classList.remove('opacity-0', '-translate-y-3');
+    box.classList.add('opacity-100', 'translate-y-0');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      box.classList.add('opacity-0', '-translate-y-3');
+      box.classList.remove('opacity-100', 'translate-y-0');
+    }, 2000);
+  }
+
+  // ==========================================
+  // 2. CURRICULUM CATALOG
+  // ==========================================
+  const SUBJECTS = [
+    {
+      id: 'korean',
+      name: '국어',
+      subtitle: '의사소통 · 문해력',
+      icon: '📖',
+      cardStyle: 'bg-white border-orange-300',
+      iconBg: 'bg-orange-100',
+      badge: 'bg-orange-600 text-white',
+      btn: 'bg-orange-600 hover:bg-orange-700 text-white',
+      games: {
+        1: { title: '소리-그림 짝꿍 터치', desc: '음성을 듣고 알맞은 그림을 터치해요' },
+        2: { title: '상황별 문장 블록 조립', desc: '그림을 보고 문장 카드를 순서대로 놓아요' },
+        3: { title: '키오스크 주문 미션', desc: '지시문을 읽고 무인 주문기로 주문해요' }
+      }
+    },
+    {
+      id: 'math',
+      name: '수학',
+      subtitle: '수 개념 · 화폐 · 시간',
+      icon: '🧮',
+      cardStyle: 'bg-white border-teal-300',
+      iconBg: 'bg-teal-100',
+      badge: 'bg-teal-700 text-white',
+      btn: 'bg-teal-700 hover:bg-teal-800 text-white',
+      games: {
+        1: { title: '1:1 대응 바구니 담기', desc: '목표 숫자만큼 과일을 바구니에 담아요' },
+        2: { title: '편의점 동전·지폐 계산대', desc: '물건 가격에 맞게 돈을 내어 계산해요' },
+        3: { title: '하루 일과 시계·예산 마스터', desc: '시계 시간을 맞추고 알맞게 장을 봐요' }
+      }
+    },
+    {
+      id: 'social',
+      name: '사회',
+      subtitle: '지역사회 · 안전 · 교통',
+      icon: '🏘️',
+      cardStyle: 'bg-white border-sky-300',
+      iconBg: 'bg-sky-100',
+      badge: 'bg-sky-700 text-white',
+      btn: 'bg-sky-700 hover:bg-sky-800 text-white',
+      games: {
+        1: { title: '신호등·안전 표지판 반응', desc: '초록불과 빨간불에 맞춰 안전하게 행동해요' },
+        2: { title: '우리 동네 장소·역할 찾기', desc: '상황에 맞는 동네 기관을 찾아 연결해요' },
+        3: { title: '대중교통 환승·비상 대처', desc: '버스를 타고 내리며 안전하게 이동해요' }
+      }
+    },
+    {
+      id: 'career',
+      name: '진로와직업',
+      subtitle: '작업 도구 · 공정 · 예절',
+      icon: '🧰',
+      cardStyle: 'bg-white border-violet-300',
+      iconBg: 'bg-violet-100',
+      badge: 'bg-violet-700 text-white',
+      btn: 'bg-violet-700 hover:bg-violet-800 text-white',
+      games: {
+        1: { title: '도구와 작업장 짝짓기', desc: '도구가 쓰이는 알맞은 일터를 찾아요' },
+        2: { title: '카페 음료 만들기 순서', desc: '작업 카드를 올바른 순서로 눌러 완성해요' },
+        3: { title: '출근 준비·고객 응대', desc: '직장 예절과 손님 응대 상황을 체험해요' }
       }
     }
+  ];
 
-    function project(pt, w, h) {
-      const cy = Math.cos(rotY), sy = Math.sin(rotY);
-      const cx = Math.cos(rotX), sx = Math.sin(rotX);
+  const LEVEL_INFO = {
+    1: { name: '1수준 · 감각·기초', desc: '큰 그림 · 선택지 2개 · 즉시 안내' },
+    2: { name: '2수준 · 생활·적용', desc: '일상 맥락 · 순서 배열 · 3~4개 선택' },
+    3: { name: '3수준 · 문제해결·자립', desc: '키오스크 · 교통 · 직업 시뮬레이션' }
+  };
 
-      let x = pt.x * cy - pt.z * sy;
-      let z = pt.x * sy + pt.z * cy;
-      let y = pt.y * cx - z * sx;
-      z = pt.y * sx + z * cx;
+  // ==========================================
+  // 3. GAME DATA DEFINITIONS
+  // ==========================================
+  const KOREAN_L1_ROUNDS = [
+    { prompt: '사과를 터치해 보세요!', target: 'apple', options: [
+      { id: 'apple', emoji: '🍎', label: '사과' },
+      { id: 'car', emoji: '🚌', label: '버스' }
+    ]},
+    { prompt: '강아지를 찾아 터치해 보세요!', target: 'dog', options: [
+      { id: 'umbrella', emoji: '☂️', label: '우산' },
+      { id: 'dog', emoji: '🐶', label: '강아지' }
+    ]},
+    { prompt: '우유를 찾아 터치해 보세요!', target: 'milk', options: [
+      { id: 'milk', emoji: '🥛', label: '우유' },
+      { id: 'clock', emoji: '⏰', label: '시계' }
+    ]}
+  ];
 
-      const fov = Math.min(w, h) * 0.68;
-      const scale = fov / Math.max(1.0, 3.5 + z);
-      return {
-        x: w * 0.5 + x * scale,
-        y: h * 0.56 + y * scale
-      };
+  const KOREAN_L2_ROUNDS = [
+    {
+      sceneEmoji: '🤕',
+      prompt: '친구가 넘어졌을 때 알맞은 문장을 순서대로 눌러 조립하세요.',
+      answerIds: ['who', 'act', 'say'],
+      blocks: [
+        { id: 'act', emoji: '🏃', text: '넘어졌어요' },
+        { id: 'say', emoji: '💬', text: '괜찮아?' },
+        { id: 'who', emoji: '👦', text: '친구가' }
+      ]
+    },
+    {
+      sceneEmoji: '🎁',
+      prompt: '친구가 선물을 주었을 때 알맞은 문장을 순서대로 눌러 조립하세요.',
+      answerIds: ['who', 'act', 'say'],
+      blocks: [
+        { id: 'say', emoji: '🙏', text: '고마워요' },
+        { id: 'who', emoji: '👧', text: '친구가' },
+        { id: 'act', emoji: '🎁', text: '선물을 줬어요' }
+      ]
+    },
+    {
+      sceneEmoji: '🍽️',
+      prompt: '점심시간에 급식을 먹을 때 문장을 순서대로 조립하세요.',
+      answerIds: ['who', 'act', 'say'],
+      blocks: [
+        { id: 'who', emoji: '🙋', text: '내가' },
+        { id: 'say', emoji: '😋', text: '잘 먹겠습니다' },
+        { id: 'act', emoji: '🍚', text: '밥을 먹어요' }
+      ]
     }
+  ];
 
-    function getAlignedProngAngles(nodeKey, pts, allStageEdges) {
-      const used = [];
-      let sumX = 0;
-      let sumY = 0;
+  const KOREAN_L3_ROUNDS = [
+    {
+      mission: '미션: "따뜻한 우유 1잔"을 "포장"으로 주문하세요.',
+      targetMenu: '우유',
+      targetTemp: '따뜻하게',
+      targetPack: '포장하기'
+    },
+    {
+      mission: '미션: "시원한 딸기주스 1잔"을 "매장 식사"로 주문하세요.',
+      targetMenu: '딸기주스',
+      targetTemp: '시원하게',
+      targetPack: '매장 식사'
+    }
+  ];
 
-      allStageEdges.forEach(([a, b]) => {
-        let other = null;
-        if (a === nodeKey) other = b;
-        else if (b === nodeKey) other = a;
-        if (other && pts[other]) {
-          const dx = pts[other].x - pts[nodeKey].x;
-          const dy = pts[other].y - pts[nodeKey].y;
-          const len = Math.hypot(dx, dy);
-          if (len > 1e-3) {
-            used.push(Math.atan2(dy, dx));
-            sumX += dx / len;
-            sumY += dy / len;
-          }
+  const MATH_L1_ROUNDS = [
+    { itemEmoji: '🍎', itemName: '사과', targetCount: 2, prompt: '바구니에 사과 2개를 담아 보세요!' },
+    { itemEmoji: '🍊', itemName: '귤', targetCount: 3, prompt: '바구니에 귤 3개를 담아 보세요!' },
+    { itemEmoji: '🍓', itemName: '딸기', targetCount: 4, prompt: '바구니에 딸기 4개를 담아 보세요!' }
+  ];
+
+  const MATH_L2_ROUNDS = [
+    { itemEmoji: '🥛', itemName: '우유', price: 1500, prompt: '1,500원짜리 우유를 사기 위해 알맞은 돈을 내세요.' },
+    { itemEmoji: '🥐', itemName: '소금빵', price: 2200, prompt: '2,200원짜리 소금빵을 사기 위해 알맞은 돈을 내세요.' },
+    { itemEmoji: '🍙', itemName: '삼각김밥', price: 1300, prompt: '1,300원짜리 삼각김밥을 사기 위해 알맞은 돈을 내세요.' }
+  ];
+
+  const MATH_L3_ROUNDS = [
+    {
+      type: 'clock',
+      prompt: '학교 등교 시간인 "오전 9시 00분"으로 시계를 맞춰 보세요.',
+      targetHour: 9,
+      targetMin: 0
+    },
+    {
+      type: 'budget',
+      prompt: '용돈 3,000원 안에서 간식 2가지를 골라 장바구니에 담으세요.',
+      budget: 3000,
+      items: [
+        { id: 'bread', emoji: '🍞', name: '식빵', price: 1500 },
+        { id: 'juice', emoji: '🧃', name: '주스', price: 1000 },
+        { id: 'cake', emoji: '🍰', name: '케이크', price: 2800 },
+        { id: 'milk', emoji: '🥛', name: '우유', price: 1200 }
+      ]
+    }
+  ];
+
+  const SOCIAL_L1_ROUNDS = [
+    {
+      light: 'green',
+      prompt: '신호등이 초록불입니다! 어떻게 해야 할까요?',
+      target: 'go',
+      options: [
+        { id: 'go', emoji: '🚶', label: '손 들고 건너기' },
+        { id: 'stop', emoji: '✋', label: '멈춰 서기' }
+      ]
+    },
+    {
+      light: 'red',
+      prompt: '신호등이 빨간불입니다! 어떻게 해야 할까요?',
+      target: 'stop',
+      options: [
+        { id: 'go', emoji: '🏃', label: '뛰어서 건너기' },
+        { id: 'stop', emoji: '🛑', label: '안전선 뒤에 멈추기' }
+      ]
+    },
+    {
+      light: 'caution',
+      prompt: '바닥이 젖어 미끄러워요! 알맞은 행동을 고르세요.',
+      target: 'walk',
+      options: [
+        { id: 'walk', emoji: '🐢', label: '천천히 걸어가기' },
+        { id: 'run', emoji: '⚡', label: '빠르게 뛰어다니기' }
+      ]
+    }
+  ];
+
+  const SOCIAL_L2_ROUNDS = [
+    {
+      prompt: '편지나 소포를 부치려면 어디로 가야 할까요?',
+      target: 'post',
+      options: [
+        { id: 'post', emoji: '📮', label: '우체국' },
+        { id: 'hospital', emoji: '🏥', label: '병원' },
+        { id: 'fire', emoji: '🚒', label: '소방서' }
+      ]
+    },
+    {
+      prompt: '열이 나고 배가 아플 때는 어디로 가야 할까요?',
+      target: 'hospital',
+      options: [
+        { id: 'mart', emoji: '🛒', label: '마트' },
+        { id: 'hospital', emoji: '🏥', label: '병원' },
+        { id: 'library', emoji: '📚', label: '도서관' }
+      ]
+    },
+    {
+      prompt: '책을 빌려서 읽고 싶을 때는 어디로 가야 할까요?',
+      target: 'library',
+      options: [
+        { id: 'library', emoji: '📚', label: '도서관' },
+        { id: 'police', emoji: '🚓', label: '경찰서' },
+        { id: 'bakery', emoji: '🥐', label: '빵집' }
+      ]
+    }
+  ];
+
+  const SOCIAL_L3_ROUNDS = [
+    {
+      stepTitle: '1단계: 알맞은 버스 타기',
+      prompt: '도서관에 가려면 "102번 버스"를 타야 해요. 어떤 버스를 탈까요?',
+      target: '102',
+      options: [
+        { id: '102', emoji: '🚌', label: '102번 (도서관행)' },
+        { id: '305', emoji: '🚌', label: '305번 (기차역행)' },
+        { id: '500', emoji: '🚌', label: '500번 (공항행)' }
+      ]
+    },
+    {
+      stepTitle: '2단계: 요금 내기',
+      prompt: '버스에 탔습니다. 단말기에 무엇을 대야 할까요?',
+      target: 'card',
+      options: [
+        { id: 'card', emoji: '💳', label: '교통카드 태그하기' },
+        { id: 'key', emoji: '🔑', label: '집 열쇠 대기' },
+        { id: 'bell', emoji: '🔔', label: '바로 하차 벨 누르기' }
+      ]
+    },
+    {
+      stepTitle: '3단계: 비상 상황 대처',
+      prompt: '만약 길을 잃어버렸다면 누구에게 도움을 요청해야 할까요?',
+      target: 'police',
+      options: [
+        { id: 'stranger', emoji: '🕶️', label: '모르는 사람 차 타기' },
+        { id: 'police', emoji: '👮', label: '경찰관·역무원에게 도움 요청' },
+        { id: 'hide', emoji: '🙈', label: '혼자 구석에 숨어 있기' }
+      ]
+    }
+  ];
+
+  const CAREER_L1_ROUNDS = [
+    {
+      toolEmoji: '🧹',
+      toolName: '빗자루',
+      prompt: '빗자루는 어느 작업장에서 사용하나요?',
+      target: 'clean',
+      options: [
+        { id: 'clean', emoji: '✨', label: '청소 구역' },
+        { id: 'cook', emoji: '🍳', label: '요리 냄비' }
+      ]
+    },
+    {
+      toolEmoji: '🛒',
+      toolName: '장바구니',
+      prompt: '장바구니는 어느 일터에서 사용하나요?',
+      target: 'mart',
+      options: [
+        { id: 'garden', emoji: '🌱', label: '화단 물주기' },
+        { id: 'mart', emoji: '🏪', label: '마트 계산대' }
+      ]
+    },
+    {
+      toolEmoji: '☕',
+      toolName: '커피 머신',
+      prompt: '커피 머신은 어느 일터에서 사용하나요?',
+      target: 'cafe',
+      options: [
+        { id: 'cafe', emoji: '🧁', label: '카페' },
+        { id: 'library', emoji: '📖', label: '도서관' }
+      ]
+    }
+  ];
+
+  const CAREER_L2_ROUNDS = [
+    {
+      title: '아이스티 만들기 4단계',
+      prompt: '카페에서 아이스티를 만드는 올바른 순서대로 카드를 눌러 주세요!',
+      answerIds: ['cup', 'ice', 'tea', 'lid'],
+      steps: [
+        { id: 'ice', emoji: '🧊', text: '얼음 담기' },
+        { id: 'cup', emoji: '🥤', text: '빈 컵 놓기' },
+        { id: 'lid', emoji: '⭕', text: '뚜껑 닫기' },
+        { id: 'tea', emoji: '🍹', text: '아이스티 붓기' }
+      ]
+    },
+    {
+      title: '마트 물건 진열하기 3단계',
+      prompt: '마트에서 우유를 진열하는 올바른 순서대로 카드를 눌러 주세요!',
+      answerIds: ['check', 'wipe', 'front'],
+      steps: [
+        { id: 'front', emoji: '🥛', text: '유통기한 짧은 걸 앞줄에' },
+        { id: 'check', emoji: '🔍', text: '유통기한 확인하기' },
+        { id: 'wipe', emoji: '🧻', text: '진열대 먼지 닦기' }
+      ]
+    }
+  ];
+
+  const CAREER_L3_ROUNDS = [
+    {
+      stepTitle: '1단계: 출근 복장 점검',
+      prompt: '카페에 출근했습니다. 위생을 위해 가장 먼저 무엇을 착용할까요?',
+      target: 'apron',
+      options: [
+        { id: 'apron', emoji: '🦺', label: '앞치마와 위생모 쓰기' },
+        { id: 'pajama', emoji: '🛌', label: '잠옷 그대로 일하기' },
+        { id: 'sunglass', emoji: '🕶️', label: '선글라스 쓰기' }
+      ]
+    },
+    {
+      stepTitle: '2단계: 손님 맞이하기',
+      prompt: '손님이 가게에 들어오셨어요. 어떻게 인사할까요?',
+      target: 'greet',
+      options: [
+        { id: 'ignore', emoji: '😶', label: '아무 말 안 하기' },
+        { id: 'greet', emoji: '😊', label: '"어서 오세요, 무엇을 도와드릴까요?"' },
+        { id: 'turn', emoji: '🚶', label: '뒤돌아서 가버리기' }
+      ]
+    },
+    {
+      stepTitle: '3단계: 실수 상황 대처',
+      prompt: '손님이 "주문한 것과 다른 음료가 나왔어요"라고 말씀하세요. 어떻게 할까요?',
+      target: 'apology',
+      options: [
+        { id: 'argue', emoji: '😠', label: '"그냥 드세요"라고 말하기' },
+        { id: 'apology', emoji: '🙇', label: '"죄송합니다, 바로 다시 만들어 드리겠습니다"' },
+        { id: 'hide', emoji: '🙈', label: '주방으로 숨기' }
+      ]
+    }
+  ];
+
+  // ==========================================
+  // 4. RENDER ROUTER & SHELL CONTROL
+  // ==========================================
+  const root = document.getElementById('app-root');
+  const topStatus = document.getElementById('top-game-status');
+  const bottomDock = document.getElementById('bottom-dock');
+
+  function updateHeader() {
+    document.getElementById('star-count').textContent = state.stars;
+    document.body.classList.toggle('text-lg', state.bigTextMode);
+
+    const ttsBtn = document.getElementById('toggle-tts');
+    document.getElementById('tts-icon').textContent = state.ttsEnabled ? '🔊' : '🔇';
+    document.getElementById('tts-label').textContent = state.ttsEnabled ? '음성 켜짐' : '음성 꺼짐';
+    ttsBtn.setAttribute('aria-pressed', String(state.ttsEnabled));
+
+    const sfxBtn = document.getElementById('toggle-sfx');
+    document.getElementById('sfx-icon').textContent = state.sfxEnabled ? '🎵' : '🔕';
+    document.getElementById('sfx-label').textContent = state.sfxEnabled ? '효과음' : '무음';
+    sfxBtn.setAttribute('aria-pressed', String(state.sfxEnabled));
+
+    if (state.view === 'game') {
+      const sub = SUBJECTS.find(x => x.id === state.currentSubject);
+      const total = getTotalRounds();
+      const pct = Math.round(((state.roundIndex + 1) / total) * 100);
+      topStatus.classList.remove('hidden');
+      bottomDock.classList.remove('hidden');
+      document.getElementById('top-badge').textContent = `${sub.name} · ${state.currentLevel}수준`;
+      document.getElementById('top-step-label').textContent = `${state.roundIndex + 1} / ${total} 단계`;
+      document.getElementById('top-progress-bar').style.width = `${pct}%`;
+    } else {
+      topStatus.classList.add('hidden');
+      bottomDock.classList.add('hidden');
+    }
+  }
+
+  function render() {
+    updateHeader();
+    if (state.view === 'hub') {
+      renderHub();
+    } else if (state.view === 'game') {
+      renderGameShell();
+    } else if (state.view === 'complete') {
+      renderComplete();
+    }
+  }
+
+  // ==========================================
+  // 5. HUB VIEW (16:9 Widescreen 1-Screen Fit)
+  // ==========================================
+  function renderHub() {
+    const levelTabs = [1, 2, 3].map(lvl => {
+      const active = state.selectedLevel === lvl;
+      return `
+        <button data-select-level="${lvl}" class="tap-target flex-1 px-5 py-3.5 rounded-2xl border-4 text-left transition ${
+          active
+            ? 'border-teal-800 bg-teal-700 text-white shadow-md'
+            : 'border-slate-300 bg-white hover:border-teal-500 text-slate-900'
+        }">
+          <div class="font-black text-lg lg:text-xl">${LEVEL_INFO[lvl].name}</div>
+          <div class="text-xs lg:text-sm font-bold mt-0.5 ${active ? 'text-teal-100' : 'text-slate-600'}">${LEVEL_INFO[lvl].desc}</div>
+        </button>
+      `;
+    }).join('');
+
+    const cards = SUBJECTS.map(sub => {
+      const game = sub.games[state.selectedLevel];
+      const doneKey = `${sub.id}-${state.selectedLevel}`;
+      const isDone = !!state.completedGames[doneKey];
+      return `
+        <article class="rounded-3xl border-4 p-4 lg:p-5 flex flex-col justify-between shadow-sm transition hover:shadow-lg ${sub.cardStyle}">
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-4">
+              <span class="w-16 h-16 rounded-2xl ${sub.iconBg} flex items-center justify-center text-4xl shrink-0">${sub.icon}</span>
+              <div>
+                <h2 class="text-2xl lg:text-3xl font-black tracking-tight text-slate-900">${sub.name}</h2>
+                <p class="text-sm font-bold text-slate-600">${sub.subtitle}</p>
+              </div>
+            </div>
+            ${isDone ? '<span class="px-3 py-1.5 rounded-full bg-amber-300 text-amber-950 text-sm font-black shrink-0">⭐ 완료</span>' : ''}
+          </div>
+
+          <div class="my-3 bg-slate-50 rounded-2xl p-3.5 border-2 border-slate-200">
+            <div class="text-xs font-black text-slate-500 mb-0.5">${state.selectedLevel}수준 체험 활동</div>
+            <div class="text-xl font-black text-slate-900">${game.title}</div>
+            <p class="text-sm font-medium text-slate-600 mt-0.5">${game.desc}</p>
+          </div>
+
+          <button data-start-subject="${sub.id}" data-start-level="${state.selectedLevel}" class="tap-target w-full py-3.5 px-5 rounded-2xl font-black text-lg shadow-sm transition flex items-center justify-center gap-2 ${sub.btn}">
+            <span>활동 시작하기</span>
+            <span>→</span>
+          </button>
+        </article>
+      `;
+    }).join('');
+
+    root.innerHTML = `
+      <section class="max-w-7xl w-full mx-auto my-auto pop-in">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-2 mb-3">
+          <div>
+            <h1 class="text-2xl lg:text-3xl font-black text-slate-900">오늘은 어떤 과목을 체험해 볼까요?</h1>
+            <p class="text-slate-600 text-base font-medium">수준을 고른 뒤 과목 카드를 눌러 바로 시작하세요.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4" role="tablist" aria-label="학습 수준 선택">
+          ${levelTabs}
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-5">
+          ${cards}
+        </div>
+      </section>
+    `;
+
+    root.querySelectorAll('[data-select-level]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        playSfx('tap');
+        state.selectedLevel = Number(btn.getAttribute('data-select-level'));
+        speak(`${state.selectedLevel}수준을 선택했어요.`);
+        render();
+      });
+    });
+
+    root.querySelectorAll('[data-start-subject]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        playSfx('tap');
+        startGame(btn.getAttribute('data-start-subject'), Number(btn.getAttribute('data-start-level')));
+      });
+    });
+  }
+
+  // ==========================================
+  // 6. GAME ENGINE & WIDESCREEN STAGE
+  // ==========================================
+  function startGame(subjectId, level) {
+    state.view = 'game';
+    state.currentSubject = subjectId;
+    state.currentLevel = level;
+    state.roundIndex = 0;
+    initRoundState();
+    render();
+  }
+
+  function getTotalRounds() {
+    const key = `${state.currentSubject}-${state.currentLevel}`;
+    const map = {
+      'korean-1': KOREAN_L1_ROUNDS.length,
+      'korean-2': KOREAN_L2_ROUNDS.length,
+      'korean-3': KOREAN_L3_ROUNDS.length,
+      'math-1': MATH_L1_ROUNDS.length,
+      'math-2': MATH_L2_ROUNDS.length,
+      'math-3': MATH_L3_ROUNDS.length,
+      'social-1': SOCIAL_L1_ROUNDS.length,
+      'social-2': SOCIAL_L2_ROUNDS.length,
+      'social-3': SOCIAL_L3_ROUNDS.length,
+      'career-1': CAREER_L1_ROUNDS.length,
+      'career-2': CAREER_L2_ROUNDS.length,
+      'career-3': CAREER_L3_ROUNDS.length
+    };
+    return map[key] || 1;
+  }
+
+  function initRoundState() {
+    state.gameData = {
+      hintActive: false,
+      pickedIds: [],
+      count: 0,
+      paid: 0,
+      hour: 12,
+      min: 0,
+      cartIds: [],
+      kioskMenu: null,
+      kioskTemp: null,
+      kioskPack: null
+    };
+    const promptText = getCurrentPromptText();
+    if (promptText) speak(promptText);
+  }
+
+  function getCurrentPromptText() {
+    const { currentSubject: s, currentLevel: l, roundIndex: r } = state;
+    if (s === 'korean' && l === 1) return KOREAN_L1_ROUNDS[r].prompt;
+    if (s === 'korean' && l === 2) return KOREAN_L2_ROUNDS[r].prompt;
+    if (s === 'korean' && l === 3) return KOREAN_L3_ROUNDS[r].mission;
+    if (s === 'math' && l === 1) return MATH_L1_ROUNDS[r].prompt;
+    if (s === 'math' && l === 2) return MATH_L2_ROUNDS[r].prompt;
+    if (s === 'math' && l === 3) return MATH_L3_ROUNDS[r].prompt;
+    if (s === 'social' && l === 1) return SOCIAL_L1_ROUNDS[r].prompt;
+    if (s === 'social' && l === 2) return SOCIAL_L2_ROUNDS[r].prompt;
+    if (s === 'social' && l === 3) return SOCIAL_L3_ROUNDS[r].prompt;
+    if (s === 'career' && l === 1) return CAREER_L1_ROUNDS[r].prompt;
+    if (s === 'career' && l === 2) return CAREER_L2_ROUNDS[r].prompt;
+    if (s === 'career' && l === 3) return CAREER_L3_ROUNDS[r].prompt;
+    return '';
+  }
+
+  function advanceRound() {
+    playSfx('success');
+    showToast('잘했어요! 다음 문제로 넘어가요 ⭐', 'success');
+    const total = getTotalRounds();
+    setTimeout(() => {
+      if (state.roundIndex + 1 < total) {
+        state.roundIndex += 1;
+        initRoundState();
+        render();
+      } else {
+        const key = `${state.currentSubject}-${state.currentLevel}`;
+        if (!state.completedGames[key]) {
+          state.stars += 3;
+          state.completedGames[key] = true;
+          saveProgress();
+        } else {
+          state.stars += 1;
+          saveProgress();
+        }
+        state.view = 'complete';
+        playSfx('fanfare');
+        speak('정말 잘했어요! 이번 활동을 모두 마쳤습니다!');
+        render();
+      }
+    }, 900);
+  }
+
+  function handleGentleNudge(hintMessage) {
+    playSfx('nudge');
+    if (state.autoHintMode) {
+      state.gameData.hintActive = true;
+    }
+    const msg = hintMessage || '다시 한 번 천천히 살펴볼까요?';
+    showToast(msg, 'warn');
+    speak(msg);
+    render();
+  }
+
+  function renderGameShell() {
+    const sub = SUBJECTS.find(x => x.id === state.currentSubject);
+    const gameMeta = sub.games[state.currentLevel];
+
+    root.innerHTML = `
+      <section class="max-w-7xl w-full mx-auto my-auto pop-in">
+        <div class="bg-white rounded-3xl border-4 border-slate-200 shadow-sm p-6 lg:p-10">
+          <div class="text-sm font-black text-teal-700 mb-2">${sub.name} ${state.currentLevel}수준 · ${gameMeta.title}</div>
+          <div id="game-stage"></div>
+        </div>
+      </section>
+    `;
+
+    const stage = document.getElementById('game-stage');
+    renderCurrentGameStage(stage);
+  }
+
+  function renderCurrentGameStage(stage) {
+    const key = `${state.currentSubject}-${state.currentLevel}`;
+    switch (key) {
+      case 'korean-1': return renderKoreanL1(stage);
+      case 'korean-2': return renderKoreanL2(stage);
+      case 'korean-3': return renderKoreanL3(stage);
+      case 'math-1': return renderMathL1(stage);
+      case 'math-2': return renderMathL2(stage);
+      case 'math-3': return renderMathL3(stage);
+      case 'social-1': return renderSocialL1(stage);
+      case 'social-2': return renderSocialL2(stage);
+      case 'social-3': return renderSocialL3(stage);
+      case 'career-1': return renderCareerL1(stage);
+      case 'career-2': return renderCareerL2(stage);
+      case 'career-3': return renderCareerL3(stage);
+    }
+  }
+
+  // ==========================================
+  // 7. INDIVIDUAL GAME RENDERERS (16:9 WIDESCREEN SPLIT)
+  // ==========================================
+
+  // --- KOREAN 1 ---
+  function renderKoreanL1(stage) {
+    const round = KOREAN_L1_ROUNDS[state.roundIndex];
+    stage.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div class="lg:col-span-5">
+          <h2 class="text-3xl lg:text-4xl font-black text-slate-900 leading-snug mb-3">${round.prompt}</h2>
+          <p class="text-lg font-bold text-slate-600">오른쪽에서 알맞은 그림을 크게 눌러 보세요.</p>
+        </div>
+        <div class="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6">
+          ${round.options.map(opt => {
+            const isHint = state.gameData.hintActive && opt.id === round.target;
+            return `
+              <button data-pick="${opt.id}" class="tap-target p-8 rounded-3xl border-4 border-slate-300 bg-slate-50 hover:bg-orange-50 hover:border-orange-500 transition flex flex-col items-center justify-center gap-4 min-h-[240px] ${isHint ? 'hint-pulse' : ''}">
+                <span class="text-8xl lg:text-9xl leading-none">${opt.emoji}</span>
+                <span class="text-2xl lg:text-3xl font-black text-slate-900">${opt.label}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+    stage.querySelectorAll('[data-pick]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.getAttribute('data-pick') === round.target) {
+          speak('맞았어요! 참 잘했습니다.');
+          advanceRound();
+        } else {
+          handleGentleNudge('반짝이는 그림을 다시 살펴보세요!');
         }
       });
+    });
+  }
 
-      const neededUnused = Math.max(0, 6 - used.length);
-      if (used.length === 0) {
-        return [0, 1, 2, 3, 4, 5].map(i => (i * Math.PI) / 3);
-      }
-      if (neededUnused === 0) {
-        return used;
-      }
+  // --- KOREAN 2 ---
+  function renderKoreanL2(stage) {
+    const round = KOREAN_L2_ROUNDS[state.roundIndex];
+    const picked = state.gameData.pickedIds;
+    const nextExpectedId = round.answerIds[picked.length];
 
-      const oppAngle = Math.hypot(sumX, sumY) < 0.05
-        ? Math.PI / 2
-        : Math.atan2(-sumY, -sumX);
+    const slotsHtml = round.answerIds.map((_, idx) => {
+      const bId = picked[idx];
+      const block = bId ? round.blocks.find(b => b.id === bId) : null;
+      return `
+        <div class="min-h-[96px] rounded-2xl border-4 ${block ? 'border-teal-600 bg-teal-50' : 'border-dashed border-slate-300 bg-slate-50'} flex flex-col items-center justify-center p-3">
+          ${block
+            ? `<span class="text-3xl">${block.emoji}</span><span class="text-lg font-black text-teal-950 mt-1">${block.text}</span>`
+            : `<span class="text-base font-black text-slate-400">${idx + 1}번째 말</span>`
+          }
+        </div>
+      `;
+    }).join('');
 
-      const unused = [];
-      const spread = 0.52;
-      for (let k = 0; k < neededUnused; k++) {
-        unused.push(oppAngle + (k - (neededUnused - 1) / 2) * spread);
-      }
-      return used.concat(unused);
-    }
+    stage.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div class="lg:col-span-5 bg-orange-50 border-4 border-orange-200 rounded-3xl p-6">
+          <div class="text-6xl mb-3">${round.sceneEmoji}</div>
+          <h2 class="text-2xl lg:text-3xl font-black text-slate-900 leading-snug">${round.prompt}</h2>
+        </div>
 
-    function drawConnector6(p, r, angles) {
-      ctx.save();
-      ctx.translate(p.x, p.y);
+        <div class="lg:col-span-7 space-y-6">
+          <div class="grid grid-cols-3 gap-3">${slotsHtml}</div>
+          <div>
+            <div class="text-sm font-black text-slate-500 mb-2">아래 카드를 순서대로 터치하세요:</div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              ${round.blocks.map(b => {
+                const used = picked.includes(b.id);
+                const isHint = state.gameData.hintActive && b.id === nextExpectedId;
+                return `
+                  <button data-block="${b.id}" ${used ? 'disabled' : ''} class="tap-target p-5 rounded-2xl border-4 transition flex flex-col items-center justify-center gap-2 ${
+                    used ? 'opacity-30 bg-slate-100 border-slate-200' : 'bg-white border-slate-300 hover:border-orange-500 hover:bg-orange-50'
+                  } ${isHint ? 'hint-pulse' : ''}">
+                    <span class="text-4xl">${b.emoji}</span>
+                    <span class="text-xl font-black text-slate-900">${b.text}</span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
 
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = Math.max(3.5, r * 0.42);
-      ctx.lineCap = 'round';
-      angles.forEach(ang => {
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(Math.cos(ang) * r * 1.9, Math.sin(ang) * r * 1.9);
-        ctx.stroke();
+    stage.querySelectorAll('[data-block]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-block');
+        if (id === nextExpectedId) {
+          playSfx('tap');
+          const b = round.blocks.find(x => x.id === id);
+          speak(b.text);
+          state.gameData.pickedIds.push(id);
+          state.gameData.hintActive = false;
+          if (state.gameData.pickedIds.length === round.answerIds.length) {
+            const fullSentence = round.answerIds.map(aid => round.blocks.find(x => x.id === aid).text).join(' ');
+            setTimeout(() => speak(fullSentence), 400);
+            advanceRound();
+          } else {
+            render();
+          }
+        } else {
+          handleGentleNudge('문장의 첫 번째 말부터 순서대로 눌러 보세요!');
+        }
       });
+    });
+  }
 
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.82, 0, Math.PI * 2);
-      ctx.fill();
+  // --- KOREAN 3 ---
+  function renderKoreanL3(stage) {
+    const round = KOREAN_L3_ROUNDS[state.roundIndex];
+    const gd = state.gameData;
+    const menus = [
+      { name: '우유', emoji: '🥛', price: '2,000원' },
+      { name: '딸기주스', emoji: '🍓', price: '3,000원' },
+      { name: '아이스티', emoji: '🍹', price: '2,500원' }
+    ];
+    const temps = ['따뜻하게', '시원하게'];
+    const packs = ['매장 식사', '포장하기'];
 
-      ctx.fillStyle = '#64748b';
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.25, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
+    stage.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div class="lg:col-span-4 bg-amber-50 border-4 border-amber-300 rounded-3xl p-6">
+          <div class="text-sm font-black text-amber-800 mb-2">오늘의 키오스크 미션</div>
+          <h2 class="text-2xl lg:text-3xl font-black text-slate-900 leading-snug mb-4">${round.mission}</h2>
+          <div class="bg-white rounded-2xl p-4 border-2 border-amber-200 space-y-1 text-base font-bold text-slate-700">
+            <div>선택 메뉴: <span class="text-teal-700 font-black">${gd.kioskMenu || '아직 안 고름'}</span></div>
+            <div>온도: <span class="text-teal-700 font-black">${gd.kioskTemp || '아직 안 고름'}</span></div>
+            <div>식사 방법: <span class="text-teal-700 font-black">${gd.kioskPack || '아직 안 고름'}</span></div>
+          </div>
+        </div>
 
-    function drawStrawSeated(pA, pB, rConn, prog = 1.0) {
-      const t = Math.max(0, Math.min(1, prog));
-      if (t <= 0.01) return;
+        <div class="lg:col-span-8 space-y-4">
+          <div class="grid grid-cols-3 gap-3">
+            ${menus.map(m => {
+              const sel = gd.kioskMenu === m.name;
+              const isHint = gd.hintActive && !gd.kioskMenu && m.name === round.targetMenu;
+              return `
+                <button data-kmenu="${m.name}" class="tap-target p-4 rounded-2xl border-4 flex flex-col items-center gap-1 transition ${
+                  sel ? 'border-teal-700 bg-teal-50' : 'border-slate-300 bg-white hover:border-teal-400'
+                } ${isHint ? 'hint-pulse' : ''}">
+                  <span class="text-5xl">${m.emoji}</span>
+                  <span class="text-lg font-black text-slate-900">${m.name}</span>
+                  <span class="text-sm font-bold text-slate-500">${m.price}</span>
+                </button>
+              `;
+            }).join('')}
+          </div>
 
-      const dx = pB.x - pA.x;
-      const dy = pB.y - pA.y;
-      const len = Math.hypot(dx, dy);
-      if (len < rConn * 2.0) return;
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="grid grid-cols-2 gap-2">
+              ${temps.map(t => {
+                const sel = gd.kioskTemp === t;
+                const isHint = gd.hintActive && gd.kioskMenu && !gd.kioskTemp && t === round.targetTemp;
+                return `
+                  <button data-ktemp="${t}" class="tap-target p-4 rounded-2xl border-4 font-black text-lg transition ${
+                    sel ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-300 bg-white hover:border-teal-400'
+                  } ${isHint ? 'hint-pulse' : ''}">${t}</button>
+                `;
+              }).join('')}
+            </div>
 
-      const ux = dx / len;
-      const uy = dy / len;
-      const collar = rConn * 0.84;
+            <div class="grid grid-cols-2 gap-2">
+              ${packs.map(p => {
+                const sel = gd.kioskPack === p;
+                const isHint = gd.hintActive && gd.kioskTemp && !gd.kioskPack && p === round.targetPack;
+                return `
+                  <button data-kpack="${p}" class="tap-target p-4 rounded-2xl border-4 font-black text-lg transition ${
+                    sel ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-slate-300 bg-white hover:border-teal-400'
+                  } ${isHint ? 'hint-pulse' : ''}">${p}</button>
+                `;
+              }).join('')}
+            </div>
+          </div>
 
-      const sx = pA.x + ux * collar;
-      const sy = pA.y + uy * collar;
-      const ex = pB.x - ux * collar;
-      const ey = pB.y - uy * collar;
+          <button id="btn-kiosk-submit" class="tap-target w-full py-4 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xl shadow-sm transition">
+            주문 완료하기
+          </button>
+        </div>
+      </div>
+    `;
 
-      const cx = sx + (ex - sx) * t;
-      const cy = sy + (ey - sy) * t;
-
-      ctx.save();
-      ctx.strokeStyle = '#991b1b';
-      ctx.lineWidth = 14;
-      ctx.lineCap = 'butt';
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(cx, cy);
-      ctx.stroke();
-
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 10;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(cx, cy);
-      ctx.stroke();
-
-      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(cx, cy);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    function setStep(idx) {
-      currentStep = Math.max(0, Math.min(MAX_STEP, idx));
-      stepAnim = 0;
-      userDragged = false;
-      triggered.clear();
-
-      prevBtn.disabled = (currentStep === 0);
-      nextBtn.disabled = (currentStep === MAX_STEP);
-
-      if (currentStep <= 1) {
-        targetFold = 0;
-        foldAngle = 0;
-        targetRotY = -0.35;
-        targetRotX = 0.65;
-      } else if (currentStep === 2) {
-        targetFold = Math.PI / 4;
-        targetRotY = -Math.PI / 2;
-        targetRotX = 0.22;
-      } else if (currentStep === 3 || currentStep === 4) {
-        targetFold = Math.PI / 4;
-        foldAngle = Math.PI / 4;
-        targetRotY = -Math.PI / 2;
-        targetRotX = 0.22;
-      } else if (currentStep === 5) {
-        // 반대쪽 면이 잘 보이도록 반대 측면(+90도)으로 살짝 돌려줌
-        targetFold = Math.PI / 4;
-        foldAngle = Math.PI / 4;
-        targetRotY = Math.PI / 2;
-        targetRotX = 0.22;
+    stage.querySelectorAll('[data-kmenu]').forEach(b => b.addEventListener('click', () => {
+      playSfx('tap'); gd.kioskMenu = b.getAttribute('data-kmenu'); speak(gd.kioskMenu); render();
+    }));
+    stage.querySelectorAll('[data-ktemp]').forEach(b => b.addEventListener('click', () => {
+      playSfx('tap'); gd.kioskTemp = b.getAttribute('data-ktemp'); speak(gd.kioskTemp); render();
+    }));
+    stage.querySelectorAll('[data-kpack]').forEach(b => b.addEventListener('click', () => {
+      playSfx('tap'); gd.kioskPack = b.getAttribute('data-kpack'); speak(gd.kioskPack); render();
+    }));
+    document.getElementById('btn-kiosk-submit').addEventListener('click', () => {
+      if (gd.kioskMenu === round.targetMenu && gd.kioskTemp === round.targetTemp && gd.kioskPack === round.targetPack) {
+        speak('주문이 정확하게 완료되었어요!');
+        advanceRound();
       } else {
-        targetFold = Math.PI / 4;
-        foldAngle = Math.PI / 4;
-        playFanfare();
+        handleGentleNudge('미션에 적힌 메뉴, 온도, 포장 방법을 다시 확인해 보세요!');
       }
-    }
+    });
+  }
 
-    function drawEdgeList(pts, edges, rConn, animProgress, prefix) {
-      const n = edges.length;
-      edges.forEach(([a, b], idx) => {
-        const start = idx / n;
-        const span = 1 / n;
-        const p = Math.max(0, Math.min(1, (animProgress - start) / span));
-        if (p >= 0.98) triggerOnce(prefix + '_' + idx, () => playPopChime(idx));
-        drawStrawSeated(pts[a], pts[b], rConn, p);
-      });
-    }
+  // --- MATH 1 ---
+  function renderMathL1(stage) {
+    const round = MATH_L1_ROUNDS[state.roundIndex];
+    const count = state.gameData.count;
+    const numWords = ['', '하나', '둘', '셋', '넷', '다섯'];
 
-    function render() {
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, w, h);
+    const basketItems = Array.from({ length: round.targetCount }, (_, i) => {
+      const filled = i < count;
+      return `
+        <div class="w-24 h-24 rounded-2xl border-4 ${filled ? 'border-teal-600 bg-teal-50' : 'border-dashed border-slate-300 bg-white'} flex items-center justify-center text-5xl">
+          ${filled ? round.itemEmoji : ''}
+        </div>
+      `;
+    }).join('');
 
-      const nodes = getNodes(foldAngle);
-      const pts = {};
-      Object.keys(nodes).forEach(k => { pts[k] = project(nodes[k], w, h); });
-      const rConn = Math.max(10, Math.min(w, h) * 0.017);
+    stage.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div class="lg:col-span-5">
+          <h2 class="text-3xl lg:text-4xl font-black text-slate-900 leading-snug mb-3">${round.prompt}</h2>
+          <p class="text-lg font-bold text-slate-600 mb-6">${round.itemName} 버튼을 누를 때마다 1개씩 담겨요.</p>
+          <button id="btn-add-fruit" class="tap-target w-full py-6 px-8 rounded-3xl bg-teal-700 hover:bg-teal-800 text-white font-black text-2xl shadow-md flex items-center justify-center gap-4 transition ${state.gameData.hintActive ? 'hint-pulse' : ''}">
+            <span class="text-5xl">${round.itemEmoji}</span>
+            <span>${round.itemName} 1개 담기</span>
+          </button>
+        </div>
 
-      let activeEdges = [...EDGES_TOP_TRI];
-      if (currentStep >= 1) activeEdges = activeEdges.concat(EDGES_BOT_TRI);
-      if (currentStep >= 3) activeEdges = activeEdges.concat(EDGES_TIP_CONNECT);
-      if (currentStep >= 4) activeEdges = activeEdges.concat(EDGES_FILL_SIDE1);
-      if (currentStep >= 5) activeEdges = activeEdges.concat(EDGES_FILL_SIDE2);
+        <div class="lg:col-span-7 bg-amber-50 border-4 border-amber-200 rounded-3xl p-8 flex flex-col items-center">
+          <div class="text-xl font-black text-amber-950 mb-4">현재 담은 수: <span class="text-3xl text-teal-700">${count}</span> / ${round.targetCount}개</div>
+          <div class="flex flex-wrap justify-center gap-4">${basketItems}</div>
+        </div>
+      </div>
+    `;
 
-      const visibleNodes = ['B_L', 'B_M', 'B_R', 'T_ML', 'T_MR', 'T_TOP'];
-      if (currentStep >= 1) visibleNodes.push('D_ML', 'D_MR', 'D_BOT');
-      if (currentStep >= 3) visibleNodes.push('M_TOP');
-
-      visibleNodes.forEach(k => {
-        const angles = getAlignedProngAngles(k, pts, activeEdges);
-        drawConnector6(pts[k], rConn, angles);
-      });
-
-      if (currentStep === 0) {
-        drawEdgeList(pts, EDGES_TOP_TRI, rConn, stepAnim, 's0');
-      } else {
-        EDGES_TOP_TRI.forEach(([a, b]) => drawStrawSeated(pts[a], pts[b], rConn, 1.0));
+    document.getElementById('btn-add-fruit').addEventListener('click', () => {
+      if (state.gameData.count < round.targetCount) {
+        playSfx('tap');
+        state.gameData.count += 1;
+        speak(numWords[state.gameData.count] || String(state.gameData.count));
+        if (state.gameData.count === round.targetCount) {
+          render();
+          setTimeout(() => {
+            speak(`${round.targetCount}개를 모두 담았어요!`);
+            advanceRound();
+          }, 500);
+        } else {
+          render();
+        }
       }
+    });
+  }
 
-      if (currentStep === 1) {
-        drawEdgeList(pts, EDGES_BOT_TRI, rConn, stepAnim, 's1');
-      } else if (currentStep >= 2) {
-        EDGES_BOT_TRI.forEach(([a, b]) => drawStrawSeated(pts[a], pts[b], rConn, 1.0));
-      }
+  // --- MATH 2 ---
+  function renderMathL2(stage) {
+    const round = MATH_L2_ROUNDS[state.roundIndex];
+    const paid = state.gameData.paid;
+    const pct = Math.min(100, Math.round((paid / round.price) * 100));
+    const coins = [
+      { val: 1000, label: '1,000원 지폐', style: 'bg-sky-100 border-sky-500 text-sky-950' },
+      { val: 500, label: '500원 동전', style: 'bg-amber-100 border-amber-500 text-amber-950' },
+      { val: 100, label: '100원 동전', style: 'bg-slate-100 border-slate-400 text-slate-900' }
+    ];
 
-      if (currentStep === 2) {
-        if (stepAnim > 0.5) triggerOnce('s2_fold', () => playPopChime(3));
-      }
+    stage.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div class="lg:col-span-5 space-y-4">
+          <h2 class="text-2xl lg:text-3xl font-black text-slate-900 leading-snug">${round.prompt}</h2>
+          <div class="p-5 rounded-2xl bg-slate-50 border-2 border-slate-200 flex items-center gap-4">
+            <span class="text-6xl">${round.itemEmoji}</span>
+            <div>
+              <div class="text-xl font-black">${round.itemName}</div>
+              <div class="text-3xl font-black text-teal-700">${round.price.toLocaleString()}원</div>
+            </div>
+          </div>
+        </div>
 
-      if (currentStep === 3) {
-        drawEdgeList(pts, EDGES_TIP_CONNECT, rConn, stepAnim, 's3');
-      } else if (currentStep >= 4) {
-        EDGES_TIP_CONNECT.forEach(([a, b]) => drawStrawSeated(pts[a], pts[b], rConn, 1.0));
-      }
+        <div class="lg:col-span-7 space-y-5">
+          <div class="p-5 rounded-2xl bg-teal-50 border-4 border-teal-200">
+            <div class="flex justify-between text-lg font-black text-teal-950 mb-2">
+              <span>내가 낸 돈</span>
+              <span class="text-3xl">${paid.toLocaleString()}원</span>
+            </div>
+            <div class="w-full h-5 bg-white rounded-full overflow-hidden border-2 border-teal-300">
+              <div class="h-full ${paid > round.price ? 'bg-amber-500' : 'bg-teal-600'} transition-all" style="width:${pct}%"></div>
+            </div>
+          </div>
 
-      if (currentStep === 4) {
-        drawEdgeList(pts, EDGES_FILL_SIDE1, rConn, stepAnim, 's4');
-      } else if (currentStep >= 5) {
-        EDGES_FILL_SIDE1.forEach(([a, b]) => drawStrawSeated(pts[a], pts[b], rConn, 1.0));
-      }
+          <div class="grid grid-cols-3 gap-3">
+            ${coins.map(c => `
+              <button data-coin="${c.val}" class="tap-target p-5 rounded-2xl border-4 font-black text-lg shadow-sm transition hover:scale-[1.02] ${c.style}">
+                + ${c.label}
+              </button>
+            `).join('')}
+          </div>
 
-      if (currentStep === 5) {
-        drawEdgeList(pts, EDGES_FILL_SIDE2, rConn, stepAnim, 's5');
-      } else if (currentStep >= 6) {
-        EDGES_FILL_SIDE2.forEach(([a, b]) => drawStrawSeated(pts[a], pts[b], rConn, 1.0));
-      }
-    }
+          <div class="flex gap-3">
+            <button id="btn-reset-pay" class="tap-target px-6 py-4 rounded-2xl border-2 border-slate-300 bg-white font-black text-lg text-slate-800">
+              다시 내기
+            </button>
+            <button id="btn-confirm-pay" class="tap-target flex-1 py-4 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white font-black text-xl">
+              계산 완료!
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
 
-    function resizeCanvas() {
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.max(320, Math.floor(window.innerWidth * dpr));
-      canvas.height = Math.max(240, Math.floor(window.innerHeight * dpr));
-    }
-
-    function loop(ts) {
-      if (!lastTs) lastTs = ts;
-      const dt = Math.min(0.05, (ts - lastTs) / 1000);
-      lastTs = ts;
-
-      if (stepAnim < 1.0) {
-        const dur = currentStep === 0 ? 3.2 : currentStep === 1 ? 2.6 : currentStep === 2 ? 1.4 : 1.6;
-        stepAnim = Math.min(1.0, stepAnim + dt / dur);
-      }
-
-      if (Math.abs(targetFold - foldAngle) > 0.002) {
-        foldAngle += (targetFold - foldAngle) * Math.min(1, dt * 3.5);
-      } else {
-        foldAngle = targetFold;
-      }
-
-      if (!isDragging && !userDragged && currentStep < MAX_STEP) {
-        rotY += (targetRotY - rotY) * Math.min(1, dt * 4.0);
-        rotX += (targetRotX - rotX) * Math.min(1, dt * 4.0);
-      }
-
-      if (currentStep === MAX_STEP && !isDragging) {
-        rotY += dt * 0.45;
-      }
-
+    stage.querySelectorAll('[data-coin]').forEach(b => b.addEventListener('click', () => {
+      playSfx('tap');
+      state.gameData.paid += Number(b.getAttribute('data-coin'));
       render();
-      animId = requestAnimationFrame(loop);
+    }));
+    document.getElementById('btn-reset-pay').addEventListener('click', () => {
+      playSfx('tap');
+      state.gameData.paid = 0;
+      render();
+    });
+    document.getElementById('btn-confirm-pay').addEventListener('click', () => {
+      if (state.gameData.paid === round.price) {
+        speak('금액이 딱 맞아요! 계산 완료!');
+        advanceRound();
+      } else if (state.gameData.paid < round.price) {
+        handleGentleNudge(`조금 더 필요해요. ${(round.price - state.gameData.paid).toLocaleString()}원을 더 내어 보세요.`);
+      } else {
+        handleGentleNudge('금액이 조금 넘쳤어요. 다시 내기를 눌러 맞춰 볼까요?');
+      }
+    });
+  }
+
+  // --- MATH 3 ---
+  function renderMathL3(stage) {
+    const round = MATH_L3_ROUNDS[state.roundIndex];
+    if (round.type === 'clock') {
+      const h = state.gameData.hour;
+      const angle = (h % 12) * 30;
+      stage.innerHTML = `
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          <div class="lg:col-span-5">
+            <h2 class="text-2xl lg:text-3xl font-black text-slate-900 leading-snug mb-4">${round.prompt}</h2>
+            <div class="text-3xl font-black text-teal-800 bg-teal-50 border-2 border-teal-200 rounded-2xl p-4 inline-block">
+              현재 시계: ${h}시 00분
+            </div>
+          </div>
+
+          <div class="lg:col-span-7 flex flex-col items-center gap-5">
+            <div class="w-52 h-52 rounded-full border-8 border-teal-700 bg-white relative flex items-center justify-center shadow-inner">
+              <div class="absolute top-2 text-base font-black text-slate-600">12</div>
+              <div class="absolute right-3 text-base font-black text-slate-600">3</div>
+              <div class="absolute bottom-2 text-base font-black text-slate-600">6</div>
+              <div class="absolute left-3 text-base font-black text-slate-600">9</div>
+              <div class="absolute w-2 h-16 bg-slate-400 rounded-full origin-bottom" style="bottom:50%;"></div>
+              <div class="absolute w-3 h-12 bg-orange-600 rounded-full origin-bottom transition-transform" style="bottom:50%; transform: rotate(${angle}deg);"></div>
+              <div class="w-5 h-5 rounded-full bg-slate-900 z-10"></div>
+            </div>
+
+            <div class="flex gap-4 w-full max-w-md">
+              <button id="btn-hour-prev" class="tap-target flex-1 py-3 rounded-2xl border-4 border-slate-300 bg-white font-black text-lg">- 1시간</button>
+              <button id="btn-hour-next" class="tap-target flex-1 py-3 rounded-2xl border-4 border-slate-300 bg-white font-black text-lg">+ 1시간</button>
+            </div>
+            <button id="btn-clock-ok" class="tap-target w-full max-w-md py-4 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white font-black text-xl">
+              이 시간으로 맞추기
+            </button>
+          </div>
+        </div>
+      `;
+      document.getElementById('btn-hour-prev').addEventListener('click', () => {
+        playSfx('tap');
+        state.gameData.hour = state.gameData.hour === 1 ? 12 : state.gameData.hour - 1;
+        render();
+      });
+      document.getElementById('btn-hour-next').addEventListener('click', () => {
+        playSfx('tap');
+        state.gameData.hour = state.gameData.hour === 12 ? 1 : state.gameData.hour + 1;
+        render();
+      });
+      document.getElementById('btn-clock-ok').addEventListener('click', () => {
+        if (state.gameData.hour === round.targetHour) {
+          speak('정확히 9시를 맞췄어요!');
+          advanceRound();
+        } else {
+          handleGentleNudge('시계 바늘을 9로 돌려 보세요!');
+        }
+      });
+    } else {
+      const cart = state.gameData.cartIds;
+      const totalSpent = cart.reduce((acc, id) => acc + round.items.find(x => x.id === id).price, 0);
+      stage.innerHTML = `
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          <div class="lg:col-span-5 space-y-4">
+            <h2 class="text-2xl lg:text-3xl font-black text-slate-900 leading-snug">${round.prompt}</h2>
+            <div class="bg-teal-50 border-4 border-teal-200 rounded-2xl p-5 space-y-1">
+              <div class="text-lg font-bold text-teal-900">고른 간식: ${cart.length}개</div>
+              <div class="font-black text-2xl ${totalSpent > round.budget ? 'text-rose-700' : 'text-teal-800'}">
+                합계 ${totalSpent.toLocaleString()}원 / ${round.budget.toLocaleString()}원
+              </div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-7 space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              ${round.items.map(it => {
+                const sel = cart.includes(it.id);
+                return `
+                  <button data-bitem="${it.id}" class="tap-target p-5 rounded-2xl border-4 flex flex-col items-center gap-1 transition ${
+                    sel ? 'border-teal-700 bg-teal-50' : 'border-slate-300 bg-white'
+                  }">
+                    <span class="text-5xl">${it.emoji}</span>
+                    <span class="text-xl font-black">${it.name}</span>
+                    <span class="text-base font-bold text-slate-600">${it.price.toLocaleString()}원</span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+            <button id="btn-budget-ok" class="tap-target w-full py-4 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white font-black text-xl">
+              장보기 완료하기
+            </button>
+          </div>
+        </div>
+      `;
+      stage.querySelectorAll('[data-bitem]').forEach(b => b.addEventListener('click', () => {
+        playSfx('tap');
+        const id = b.getAttribute('data-bitem');
+        const idx = state.gameData.cartIds.indexOf(id);
+        if (idx >= 0) state.gameData.cartIds.splice(idx, 1);
+        else state.gameData.cartIds.push(id);
+        render();
+      }));
+      document.getElementById('btn-budget-ok').addEventListener('click', () => {
+        if (cart.length >= 2 && totalSpent <= round.budget) {
+          speak('용돈 안에서 알맞게 장을 봤어요!');
+          advanceRound();
+        } else if (cart.length < 2) {
+          handleGentleNudge('간식을 2가지 이상 골라 보세요!');
+        } else {
+          handleGentleNudge('3,000원을 넘었어요! 더 저렴한 간식을 골라 볼까요?');
+        }
+      });
     }
+  }
 
-    prevBtn.addEventListener('click', () => {
-      getAudioCtx();
-      setStep(currentStep - 1);
+  // --- SOCIAL 1 ---
+  function renderSocialL1(stage) {
+    const round = SOCIAL_L1_ROUNDS[state.roundIndex];
+    const badge = round.light === 'green' ? '🟢 초록불' : round.light === 'red' ? '🔴 빨간불' : '⚠️ 주의';
+    const boxBg = round.light === 'green' ? 'bg-emerald-50 border-emerald-400' : round.light === 'red' ? 'bg-rose-50 border-rose-400' : 'bg-amber-50 border-amber-400';
+
+    stage.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div class="lg:col-span-5 p-6 rounded-3xl border-4 ${boxBg}">
+          <div class="text-4xl font-black mb-3">${badge}</div>
+          <h2 class="text-2xl lg:text-3xl font-black text-slate-900 leading-snug">${round.prompt}</h2>
+        </div>
+
+        <div class="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-5">
+          ${round.options.map(opt => {
+            const isHint = state.gameData.hintActive && opt.id === round.target;
+            return `
+              <button data-spick="${opt.id}" class="tap-target p-8 rounded-3xl border-4 border-slate-300 bg-white hover:border-sky-500 hover:bg-sky-50 flex flex-col items-center justify-center gap-4 min-h-[240px] transition ${isHint ? 'hint-pulse' : ''}">
+                <span class="text-8xl">${opt.emoji}</span>
+                <span class="text-2xl font-black text-slate-900">${opt.label}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+    stage.querySelectorAll('[data-spick]').forEach(b => b.addEventListener('click', () => {
+      if (b.getAttribute('data-spick') === round.target) {
+        speak('안전한 행동을 잘 골랐어요!');
+        advanceRound();
+      } else {
+        handleGentleNudge('안전하게 지킬 수 있는 행동을 다시 골라 보세요!');
+      }
+    }));
+  }
+
+  // --- CHOICE SCENARIO RENDERER (SOCIAL 2/3 & CAREER 1/3) ---
+  function renderChoiceScenario(stage, round, accentClass) {
+    stage.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div class="lg:col-span-5 space-y-4">
+          ${round.stepTitle ? `<div class="inline-block px-3 py-1 rounded-xl bg-sky-100 text-sky-900 text-sm font-black">${round.stepTitle}</div>` : ''}
+          ${round.toolEmoji ? `
+            <div class="flex items-center gap-4 bg-violet-50 border-4 border-violet-200 p-5 rounded-3xl">
+              <span class="text-6xl">${round.toolEmoji}</span>
+              <div>
+                <div class="text-sm font-black text-violet-700">작업 도구</div>
+                <div class="text-2xl font-black text-slate-900">${round.toolName}</div>
+              </div>
+            </div>
+          ` : ''}
+          <h2 class="text-2xl lg:text-3xl font-black text-slate-900 leading-snug">${round.prompt}</h2>
+        </div>
+
+        <div class="lg:col-span-7 grid grid-cols-1 sm:grid-cols-${round.options.length === 2 ? '2' : '3'} gap-4">
+          ${round.options.map(opt => {
+            const isHint = state.gameData.hintActive && opt.id === round.target;
+            return `
+              <button data-cpick="${opt.id}" class="tap-target p-6 rounded-3xl border-4 border-slate-300 bg-white hover:${accentClass} flex flex-col items-center text-center justify-center gap-3 min-h-[210px] transition ${isHint ? 'hint-pulse' : ''}">
+                <span class="text-7xl">${opt.emoji}</span>
+                <span class="text-xl font-black text-slate-900">${opt.label}</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+    stage.querySelectorAll('[data-cpick]').forEach(b => b.addEventListener('click', () => {
+      if (b.getAttribute('data-cpick') === round.target) {
+        speak('정답입니다! 참 잘했어요.');
+        advanceRound();
+      } else {
+        handleGentleNudge('질문을 다시 한 번 들어보고 골라 볼까요?');
+      }
+    }));
+  }
+
+  function renderSocialL2(stage) { renderChoiceScenario(stage, SOCIAL_L2_ROUNDS[state.roundIndex], 'border-sky-500 bg-sky-50'); }
+  function renderSocialL3(stage) { renderChoiceScenario(stage, SOCIAL_L3_ROUNDS[state.roundIndex], 'border-sky-500 bg-sky-50'); }
+  function renderCareerL1(stage) { renderChoiceScenario(stage, CAREER_L1_ROUNDS[state.roundIndex], 'border-violet-500 bg-violet-50'); }
+  function renderCareerL3(stage) { renderChoiceScenario(stage, CAREER_L3_ROUNDS[state.roundIndex], 'border-violet-500 bg-violet-50'); }
+
+  // --- CAREER 2 ---
+  function renderCareerL2(stage) {
+    const round = CAREER_L2_ROUNDS[state.roundIndex];
+    const picked = state.gameData.pickedIds;
+    const nextExpected = round.answerIds[picked.length];
+
+    stage.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div class="lg:col-span-5">
+          <div class="inline-block px-3 py-1 rounded-xl bg-violet-100 text-violet-900 text-sm font-black mb-3">${round.title}</div>
+          <h2 class="text-2xl lg:text-3xl font-black text-slate-900 leading-snug">${round.prompt}</h2>
+        </div>
+
+        <div class="lg:col-span-7 space-y-5">
+          <div class="grid grid-cols-2 sm:grid-cols-${round.answerIds.length} gap-3">
+            ${round.answerIds.map((_, idx) => {
+              const sId = picked[idx];
+              const step = sId ? round.steps.find(x => x.id === sId) : null;
+              return `
+                <div class="min-h-[96px] rounded-2xl border-4 ${step ? 'border-violet-600 bg-violet-50' : 'border-dashed border-slate-300 bg-slate-50'} p-3 flex flex-col items-center justify-center text-center">
+                  ${step
+                    ? `<span class="text-3xl">${step.emoji}</span><span class="text-base font-black text-violet-950 mt-1">${step.text}</span>`
+                    : `<span class="text-base font-black text-slate-400">${idx + 1}단계</span>`
+                  }
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            ${round.steps.map(st => {
+              const used = picked.includes(st.id);
+              const isHint = state.gameData.hintActive && st.id === nextExpected;
+              return `
+                <button data-cstep="${st.id}" ${used ? 'disabled' : ''} class="tap-target p-5 rounded-2xl border-4 flex items-center gap-3 transition ${
+                  used ? 'opacity-30 bg-slate-100 border-slate-200' : 'bg-white border-slate-300 hover:border-violet-500 hover:bg-violet-50'
+                } ${isHint ? 'hint-pulse' : ''}">
+                  <span class="text-4xl">${st.emoji}</span>
+                  <span class="text-lg font-black text-slate-900">${st.text}</span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+
+    stage.querySelectorAll('[data-cstep]').forEach(b => b.addEventListener('click', () => {
+      const id = b.getAttribute('data-cstep');
+      if (id === nextExpected) {
+        playSfx('tap');
+        const st = round.steps.find(x => x.id === id);
+        speak(st.text);
+        state.gameData.pickedIds.push(id);
+        state.gameData.hintActive = false;
+        if (state.gameData.pickedIds.length === round.answerIds.length) {
+          advanceRound();
+        } else {
+          render();
+        }
+      } else {
+        handleGentleNudge('작업의 첫 순서부터 차근차근 눌러 보세요!');
+      }
+    }));
+  }
+
+  // ==========================================
+  // 8. COMPLETION CELEBRATION VIEW
+  // ==========================================
+  function renderComplete() {
+    const sub = SUBJECTS.find(x => x.id === state.currentSubject);
+    const gameMeta = sub.games[state.currentLevel];
+    root.innerHTML = `
+      <section class="pop-in bg-white rounded-3xl border-4 border-amber-400 shadow-lg p-10 sm:p-14 text-center max-w-3xl w-full mx-auto">
+        <div class="text-8xl mb-4">🏆</div>
+        <h1 class="text-4xl font-black text-slate-900 mb-3">정말 잘했어요!</h1>
+        <p class="text-xl text-slate-700 mb-6">
+          <strong>${sub.name} ${state.currentLevel}수준</strong> &lt;${gameMeta.title}&gt; 활동을 모두 마쳤습니다.
+        </p>
+
+        <div class="inline-flex items-center gap-2 bg-amber-100 border-2 border-amber-300 px-8 py-4 rounded-2xl text-amber-950 font-black text-2xl mb-8">
+          <span>⭐</span>
+          <span>지금까지 모은 별: ${state.stars}개</span>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <button id="btn-retry-game" class="tap-target px-8 py-4 rounded-2xl border-4 border-slate-300 bg-white hover:bg-slate-50 font-black text-xl text-slate-900">
+            한 번 더 하기
+          </button>
+          <button id="btn-go-hub" class="tap-target px-10 py-4 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white font-black text-xl shadow-sm">
+            다른 과목 고르기
+          </button>
+        </div>
+      </section>
+    `;
+
+    document.getElementById('btn-retry-game').addEventListener('click', () => {
+      playSfx('tap');
+      startGame(state.currentSubject, state.currentLevel);
     });
-
-    nextBtn.addEventListener('click', () => {
-      getAudioCtx();
-      setStep(currentStep + 1);
+    document.getElementById('btn-go-hub').addEventListener('click', () => {
+      playSfx('tap');
+      state.view = 'hub';
+      render();
     });
+  }
 
-    canvas.addEventListener('pointerdown', (e) => {
-      isDragging = true;
-      userDragged = true;
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
+  // ==========================================
+  // 9. GLOBAL HEADER, DOCK & MODAL LISTENERS
+  // ==========================================
+  document.getElementById('btn-home').addEventListener('click', () => {
+    playSfx('tap');
+    state.view = 'hub';
+    render();
+  });
+
+  document.getElementById('btn-back-hub').addEventListener('click', () => {
+    playSfx('tap');
+    state.view = 'hub';
+    render();
+  });
+
+  document.getElementById('btn-replay-voice').addEventListener('click', () => {
+    playSfx('tap');
+    speak(getCurrentPromptText());
+  });
+
+  document.getElementById('btn-show-hint').addEventListener('click', () => {
+    playSfx('tap');
+    state.gameData.hintActive = true;
+    speak('반짝이는 칸을 눌러 보세요!');
+    render();
+  });
+
+  document.getElementById('toggle-tts').addEventListener('click', () => {
+    state.ttsEnabled = !state.ttsEnabled;
+    if (!state.ttsEnabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+    playSfx('tap');
+    render();
+  });
+
+  document.getElementById('toggle-sfx').addEventListener('click', () => {
+    state.sfxEnabled = !state.sfxEnabled;
+    if (state.sfxEnabled) playSfx('tap');
+    render();
+  });
+
+  document.getElementById('toggle-teacher').addEventListener('click', () => {
+    playSfx('tap');
+    document.getElementById('teacher-panel').classList.remove('hidden');
+  });
+
+  ['btn-close-teacher', 'btn-done-teacher'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => {
+      playSfx('tap');
+      document.getElementById('teacher-panel').classList.add('hidden');
     });
-    window.addEventListener('pointermove', (e) => {
-      if (!isDragging) return;
-      const dx = e.clientX - dragStartX;
-      const dy = e.clientY - dragStartY;
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      rotY += dx * 0.01;
-      rotX = Math.max(-0.5, Math.min(1.25, rotX + dy * 0.01));
-    });
-    window.addEventListener('pointerup', () => { isDragging = false; });
+  });
 
-    window.addEventListener('resize', resizeCanvas);
+  document.getElementById('opt-errorless').addEventListener('change', (e) => {
+    state.errorlessMode = e.target.checked;
+  });
+  document.getElementById('opt-autohint').addEventListener('change', (e) => {
+    state.autoHintMode = e.target.checked;
+  });
+  document.getElementById('opt-bigtext').addEventListener('change', (e) => {
+    state.bigTextMode = e.target.checked;
+    updateHeader();
+  });
+  document.getElementById('btn-reset-progress').addEventListener('click', () => {
+    state.stars = 0;
+    state.completedGames = {};
+    saveProgress();
+    showToast('학습 기록을 초기화했어요.');
+    render();
+  });
 
-    window.onload = () => {
-      resizeCanvas();
-      setStep(0);
-      if (animId) cancelAnimationFrame(animId);
-      animId = requestAnimationFrame(loop);
-    };
-  </script>
+  // Boot
+  render();
+})();
+</script>
 </body>
 </html>
