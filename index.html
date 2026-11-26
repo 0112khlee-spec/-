@@ -183,6 +183,7 @@
     currentLevel: 1,
     currentActivityIndex: 0,
     sessionRounds: [],
+    sessionTraceResults: [],
     roundIndex: 0,
     stars: 0,
     completedGames: {},
@@ -1851,6 +1852,7 @@
     state.currentActivityIndex = actIdx;
     const act = getCurrentActivity();
     state.sessionRounds = buildSessionRounds(act);
+    state.sessionTraceResults = [];
     state.roundIndex = 0;
     initRoundState();
     render();
@@ -1870,6 +1872,7 @@
       kioskTemp: null,
       kioskPack: null,
       hasDrawn: false,
+      traceDataUrl: '',
       readChunks: {},
       activeChunkIdx: -1
     };
@@ -2128,6 +2131,26 @@
   }
 
   // --- ENGINE 2: TRACE / DRAW CANVAS ---
+  // 캔버스에 그린 획을 흐린 안내 글자와 합쳐 한 장의 그림으로 저장한다.
+  // (결과 화면에서 글자 위치와 획이 어긋나지 않게 하기 위함)
+  function captureTrace(canvas, guideText) {
+    const rect = canvas.getBoundingClientRect();
+    const out = document.createElement('canvas');
+    out.width = canvas.width;
+    out.height = canvas.height;
+    const octx = out.getContext('2d');
+    const scale = rect.width ? canvas.width / rect.width : 1;
+    octx.fillStyle = '#F8FAFC';
+    octx.fillRect(0, 0, out.width, out.height);
+    octx.fillStyle = '#E2E8F0';
+    octx.textAlign = 'center';
+    octx.textBaseline = 'middle';
+    octx.font = `900 ${Math.round(150 * scale)}px "Noto Sans KR", "Malgun Gothic", sans-serif`;
+    octx.fillText(guideText, out.width / 2, out.height / 2);
+    octx.drawImage(canvas, 0, 0);
+    return out.toDataURL('image/png');
+  }
+
   function renderTraceEngine(stage, act) {
     const round = getCurrentRound();
     const disabled = state.gameData.roundSuccess;
@@ -2144,12 +2167,17 @@
       </div>
 
       <div class="mt-auto space-y-3">
-        <div class="relative bg-slate-50 border-4 border-slate-300 rounded-3xl overflow-hidden h-[220px] lg:h-[250px] flex items-center justify-center">
-          <div class="pointer-events-none select-none font-black text-slate-200 tracking-widest" style="font-size: 130px; line-height: 1;">
-            ${round.guide}
-          </div>
+        <div class="relative mx-auto w-full max-w-[400px] bg-slate-50 border-4 border-slate-300 rounded-3xl overflow-hidden h-[220px] lg:h-[250px] flex items-center justify-center">
           <canvas id="trace-board" class="trace-canvas absolute inset-0 w-full h-full"></canvas>
+          ${state.gameData.traceDataUrl
+            ? `<img src="${state.gameData.traceDataUrl}" alt="학생이 따라 쓴 글자" class="absolute inset-0 w-full h-full object-contain pointer-events-none">`
+            : `<div class="pointer-events-none select-none font-black text-slate-200 tracking-widest" style="font-size: 150px; line-height: 1;">
+            ${round.guide}
+          </div>`}
         </div>
+        ${disabled && state.gameData.traceDataUrl ? `
+          <p class="text-center text-base font-black text-teal-800">내가 따라 쓴 글자예요</p>
+        ` : ''}
 
         ${!disabled ? `
           <div class="flex gap-3">
@@ -2166,24 +2194,32 @@
 
     const canvas = document.getElementById('trace-board');
     if (canvas) {
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width || 600;
-      canvas.height = rect.height || 240;
       const ctx = canvas.getContext('2d');
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = 14;
-      ctx.strokeStyle = '#0F766E';
+      function sizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        const cssW = rect.width || 600;
+        const cssH = rect.height || 240;
+        const dpr = window.devicePixelRatio || 1;
+        const w = Math.round(cssW * dpr);
+        const h = Math.round(cssH * dpr);
+        if (canvas.width === w && canvas.height === h) return;
+        canvas.width = w;
+        canvas.height = h;
+        ctx.setTransform(w / cssW, 0, 0, h / cssH, 0, 0);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 14;
+        ctx.strokeStyle = '#0F766E';
+      }
+      sizeCanvas();
+      requestAnimationFrame(sizeCanvas);
 
       let drawing = false;
       function getPos(e) {
         const r = canvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return {
-          x: (clientX - r.left) * (canvas.width / r.width),
-          y: (clientY - r.top) * (canvas.height / r.height)
-        };
+        return { x: clientX - r.left, y: clientY - r.top };
       }
       function startDraw(e) {
         if (disabled) return;
@@ -2214,7 +2250,10 @@
       if (clearBtn) {
         clearBtn.addEventListener('click', () => {
           playSfx('tap');
+          ctx.save();
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.restore();
           state.gameData.hasDrawn = false;
         });
       }
@@ -2222,6 +2261,13 @@
       if (doneBtn) {
         doneBtn.addEventListener('click', () => {
           if (state.gameData.hasDrawn) {
+            const dataUrl = captureTrace(canvas, round.guide);
+            state.gameData.traceDataUrl = dataUrl;
+            state.sessionTraceResults[state.roundIndex] = {
+              guide: round.guide,
+              prompt: round.prompt,
+              dataUrl
+            };
             triggerRoundSuccess();
           } else {
             handleGentleNudge('글자 위를 손가락으로 먼저 따라 그려 보세요!');
@@ -3187,6 +3233,22 @@
             <span>⭐</span>
             <span>지금까지 모은 별: ${state.stars}개</span>
           </div>
+
+          ${act.engine === 'trace' && (state.sessionTraceResults || []).some(r => r && r.dataUrl) ? `
+            <div class="mt-7">
+              <h2 class="text-2xl font-black text-slate-900 mb-3">🖍️ 내가 따라 쓴 글자</h2>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                ${state.sessionTraceResults.map((r, i) => r && r.dataUrl ? `
+                  <div class="bg-white border-4 border-teal-400 rounded-2xl overflow-hidden shadow-sm">
+                    <div class="relative h-[120px] flex items-center justify-center bg-slate-50">
+                      <img src="${r.dataUrl}" alt="${r.guide} 따라 쓴 글자" class="absolute inset-0 w-full h-full object-contain">
+                    </div>
+                    <div class="px-2 py-1.5 text-center text-base font-black text-teal-900 bg-teal-50">${i + 1}. ${r.guide}</div>
+                  </div>
+                ` : '').join('')}
+              </div>
+            </div>
+          ` : ''}
         </div>
 
         <div class="flex flex-col sm:flex-row gap-4 justify-center mt-4">
