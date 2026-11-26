@@ -2173,24 +2173,32 @@
 
     const canvas = document.getElementById('trace-board');
     if (canvas) {
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width || 600;
-      canvas.height = rect.height || 240;
       const ctx = canvas.getContext('2d');
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = 14;
-      ctx.strokeStyle = '#0F766E';
+      function sizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        const cssW = rect.width || 600;
+        const cssH = rect.height || 240;
+        const dpr = window.devicePixelRatio || 1;
+        const w = Math.round(cssW * dpr);
+        const h = Math.round(cssH * dpr);
+        if (canvas.width === w && canvas.height === h) return;
+        canvas.width = w;
+        canvas.height = h;
+        ctx.setTransform(w / cssW, 0, 0, h / cssH, 0, 0);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 14;
+        ctx.strokeStyle = '#0F766E';
+      }
+      sizeCanvas();
+      requestAnimationFrame(sizeCanvas);
 
       let drawing = false;
       function getPos(e) {
         const r = canvas.getBoundingClientRect();
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return {
-          x: (clientX - r.left) * (canvas.width / r.width),
-          y: (clientY - r.top) * (canvas.height / r.height)
-        };
+        return { x: clientX - r.left, y: clientY - r.top };
       }
       function startDraw(e) {
         if (disabled) return;
@@ -2221,7 +2229,10 @@
       if (clearBtn) {
         clearBtn.addEventListener('click', () => {
           playSfx('tap');
+          ctx.save();
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.restore();
           state.gameData.hasDrawn = false;
         });
       }
